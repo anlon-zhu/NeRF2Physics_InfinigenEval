@@ -2,6 +2,8 @@
 #SBATCH --job-name=property_pred
 #SBATCH --output=/n/fs/scratch/az4244/nerf2physics/logs/%x_%j.out
 #SBATCH --error=/n/fs/scratch/az4244/nerf2physics/logs/%x_%j.err
+#SBATCH --partition=pvl
+#SBATCH --account=pvl
 #SBATCH --time=4:00:00
 #SBATCH --mem=32G
 #SBATCH --cpus-per-task=4
@@ -20,4 +22,4 @@ cd /n/fs/pvl-progen/anlon/NeRF2Physics_InfinigenEval
 
 # Run the script with arguments
 # You can modify property_name, scene_name and other parameters as needed
-python predict_property.py --property_name density --end_idx 1 --data_dir /n/fs/scratch/az4244/nerf2physics/data/abo_500/
+python predict_property.py --property_name density --data_dir /n/fs/scratch/az4244/nerf2physics/data/abo_500/

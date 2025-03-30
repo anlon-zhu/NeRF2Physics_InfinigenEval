@@ -20,4 +20,4 @@ cd /n/fs/pvl-progen/anlon/NeRF2Physics_InfinigenEval
 
 # Run the script with arguments
 # You can modify scene_name and other parameters as needed
-python ns_reconstruction.py --end_idx 1 --data_dir /n/fs/scratch/az4244/nerf2physics/data/abo_500/
+python ns_reconstruction.py --data_dir /n/fs/scratch/az4244/nerf2physics/data/abo_500/
