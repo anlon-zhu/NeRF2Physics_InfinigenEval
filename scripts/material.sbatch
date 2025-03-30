@@ -1,0 +1,23 @@
+#!/bin/bash
+#SBATCH --job-name=material_prop
+#SBATCH --output=/n/fs/scratch/az4244/nerf2physics/logs/%x_%j.out
+#SBATCH --error=/n/fs/scratch/az4244/nerf2physics/logs/%x_%j.err
+#SBATCH --time=2:00:00
+#SBATCH --mem=16G
+#SBATCH --cpus-per-task=2
+#SBATCH --gres=gpu:1
+
+# Set up environment variables
+export HF_HOME=/n/fs/scratch/az4244/nerf2physics/hf_cache
+export TORCH_HOME=/n/fs/scratch/az4244/nerf2physics/torch_cache
+
+# Activate conda environment
+source /n/fs/pvl-progen/anlon/anaconda3/etc/profile.d/conda.sh
+conda activate /n/fs/pvl-progen/anlon/envs/nerf2phy
+
+# Navigate to the directory
+cd /n/fs/pvl-progen/anlon/NeRF2Physics_InfinigenEval
+
+# Run the script with arguments
+# You can modify property_name, scene_name and other parameters as needed
+python material_proposal.py --property_name density --end_idx 1 --data_dir /n/fs/scratch/az4244/nerf2physics/data/abo_500/
