@@ -18,7 +18,14 @@ mkdir -p ~/.cache/pip
 rm -rf ~/.conda/pkgs/*
 mkdir -p ~/.conda/pkgs
 
-# Check available disk space
+# Remove any temporary conda files
+rm -rf ~/.conda/envs/*/conda-meta/history
+rm -rf ~/.conda/envs/*/lib/python*/site-packages/pip/_internal/cache/*
+
+# Check user's quota and available disk space
+echo "User quota information:"
+quota -s || echo "Quota command not available"
+
 echo "Disk space before installation:"
 df -h $HOME
 
@@ -30,14 +37,20 @@ export PATH=/n/fs/pvl-progen/anlon/envs/nerf2phy/nerf2phy/bin:$PATH
 echo "Python version: $(python --version)"
 echo "Conda environment: $CONDA_PREFIX"
 
-# Install PyTorch with CUDA 11.8
-pip install torch==2.1.2+cu118 torchvision==0.16.2+cu118 --extra-index-url https://download.pytorch.org/whl/cu118
+# Install PyTorch with CUDA 12.x (to match system detection of 12.8)
+pip install torch==2.2.0+cu121 torchvision==0.17.0+cu121 --extra-index-url https://download.pytorch.org/whl/cu121
 
-# Install CUDA 11.8
-conda install -c "nvidia/label/cuda-11.8.0" cuda-toolkit
+# Don't install CUDA via conda as system already has CUDA 12.8
+# Instead, just verify we can access it
+echo "Verifying CUDA access:"
 
-# Install tiny-cuda-nn
-pip install ninja git+https://github.com/NVlabs/tiny-cuda-nn/#subdirectory=bindings/torch
+# Check if CUDA tools like nvcc are available
+which nvcc || echo "nvcc not found in PATH"
+
+# Install tiny-cuda-nn with the correct CUDA version
+# Since we detected CUDA 12.8 on the system, we need compatible versions
+echo "Installing tiny-cuda-nn..."
+CUDA_HOME=/usr/local/cuda-12.8 pip install ninja git+https://github.com/NVlabs/tiny-cuda-nn/#subdirectory=bindings/torch
 
 
 # Install Nerfstudio with minimal dependencies
