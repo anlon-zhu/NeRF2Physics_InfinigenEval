@@ -38,12 +38,17 @@ mkdir -p ~/.cache/pip
 echo "Checking disk space..."
 df -h ~/.cache
 
-# Install NumPy 1.24.3 if not already installed, uninstall first
-echo "Installing NumPy 1.24.3 for compatibility..."
-if ! pip show numpy | grep -q "Version: 1.24.3"; then
-    pip uninstall numpy -y
-    pip install numpy==1.24.3
-fi
+# Force-install NumPy 1.24.3 to avoid version conflicts
+echo "Force installing NumPy 1.24.3 for compatibility..."
+pip uninstall numpy -y
+pip install numpy==1.24.3
+python -c "import numpy; print('NumPy version:', numpy.__version__)" || echo "NumPy installation failed"
+
+# Create a .npmrc file to prevent automatic NumPy upgrades
+echo "Creating .npmrc to prevent NumPy upgrades..."
+cat > ~/.npmrc << EOL
+ignore-numpy-version-check=0
+EOL
 
 # Check existing CUDA version on the system
 echo "Checking system CUDA version..."
@@ -99,12 +104,17 @@ echo "Installing tiny-cuda-nn..."
 echo "Installing/upgrading prerequisite packages..."
 pip install --upgrade cmake ninja setuptools wheel
 
+# Clean up disk space
+echo "Cleaning disk space..."
+rm -rf ~/.conda/pkgs/* || echo "Warning: Could not clean conda packages"
+rm -rf ~/.cache/pip/* || echo "Warning: Could not clean pip cache"
+
 # Clean previous installations if any
 pip uninstall -y tinycudann tiny-cuda-nn
 
-# Set environment variables for compilation
+# Set environment variables for compilation - use integers not floats
 echo "Setting TCNN_CUDA_ARCHITECTURES environment variable to support multiple architectures"
-export TCNN_CUDA_ARCHITECTURES="6.0;6.1;7.0;7.5;8.0;8.6"
+export TCNN_CUDA_ARCHITECTURES="60,61,70,75,80,86"
 
 # Install using the direct method
 echo "Cloning tiny-cuda-nn repository..."
@@ -114,7 +124,12 @@ git clone https://github.com/NVlabs/tiny-cuda-nn.git
 cd tiny-cuda-nn/bindings/torch
 
 echo "Building tiny-cuda-nn from source..."
-python setup.py install
+# Add debug output to diagnose issues
+echo "CUDA Architecture setting: $TCNN_CUDA_ARCHITECTURES"
+python -c "import os; print('Python sees TCNN_CUDA_ARCHITECTURES=', os.environ.get('TCNN_CUDA_ARCHITECTURES', 'Not set'))"
+
+# Run setup with verbose output
+python setup.py install -v
 
 # Verify the installation
 cd $OLDPWD  # Return to previous directory
