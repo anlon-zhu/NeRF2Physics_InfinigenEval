@@ -12,7 +12,6 @@ def parse_args():
     parser.add_argument("--input_dir", type=str, required=True, help="Input directory containing Infinigen renders")
     parser.add_argument("--output_dir", type=str, required=True, help="Output directory for COLMAP data")
     parser.add_argument("--scene_id", type=str, default=None, help="Scene ID to process (default: use directory name)")
-    parser.add_argument("--use_depth", action="store_true", help="Use depth images instead of RGB images")
     return parser.parse_args()
 
 def extract_view_id(filename):
@@ -100,7 +99,7 @@ def create_empty_points3d_file(output_path):
     
     print(f"Created empty points3D.txt at {output_path}")
 
-def organize_for_nerfstudio(input_dir, output_dir, scene_id=None, use_depth=False):
+def organize_for_nerfstudio(input_dir, output_dir, scene_id=None):
     """Organize Infinigen data for NeRF Studio"""
     input_dir = Path(input_dir)
     if scene_id is None:
@@ -121,13 +120,9 @@ def organize_for_nerfstudio(input_dir, output_dir, scene_id=None, use_depth=Fals
     frames_dir = input_dir / "frames"
     camview_dir = frames_dir / "camview" / "camera_0"
     
-    # Choose between RGB or Depth images
-    if use_depth:
-        image_dir = frames_dir / "Depth" / "camera_0"
-        image_suffix = "Depth"
-    else:
-        image_dir = frames_dir / "Image" / "camera_0"
-        image_suffix = "Image"
+    # Use RGB images
+    image_dir = frames_dir / "Image" / "camera_0"
+    image_suffix = "Image"
     
     if not camview_dir.exists() or not image_dir.exists():
         raise FileNotFoundError(f"Cannot find {camview_dir} or {image_dir}")
@@ -160,7 +155,7 @@ def organize_for_nerfstudio(input_dir, output_dir, scene_id=None, use_depth=Fals
         
         # Find corresponding image file
         # Convert camview_10_0_0048_0.npz to Image_10_0_0048_0.png
-        img_pattern = f"{image_suffix}_{view_id}_0_0048_0.png"
+        img_pattern = f"Image_{view_id}_0_0048_0.png"
         
         if not os.path.exists(image_dir / img_pattern):
             # Also check for exr if png not found
@@ -191,4 +186,4 @@ def organize_for_nerfstudio(input_dir, output_dir, scene_id=None, use_depth=Fals
 
 if __name__ == "__main__":
     args = parse_args()
-    organize_for_nerfstudio(args.input_dir, args.output_dir, args.scene_id, args.use_depth)
+    organize_for_nerfstudio(args.input_dir, args.output_dir, args.scene_id)
