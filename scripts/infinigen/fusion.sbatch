@@ -11,13 +11,13 @@
 
 # Check arguments
 if [ "$#" -lt 1 ]; then
-    echo "Usage: $0 <data_dir> [scene_id]"
+    echo "Usage: $0 <data_dir> [scene_name]"
     echo "Example: $0 /n/fs/scratch/${USER}/nerf2physics/infinigen_nerf_data 18015bf3"
     exit 1
 fi
 
 DATA_DIR=$1
-SCENE_ID=$2
+SCENE_NAME=$2
 
 # Set up environment variables
 export HF_HOME=/n/fs/scratch/${USER}/nerf2physics/hf_cache
@@ -34,14 +34,14 @@ cd /n/fs/pvl-progen/anlon/NeRF2Physics_InfinigenEval
 echo "[$(date)] Starting Infinigen feature fusion process"
 START_TIME=$(date +%s)
 
-# If scene_id is provided, process just that scene
-if [ ! -z "$SCENE_ID" ]; then
-    echo "Running feature fusion for single scene: $SCENE_ID"
+# If scene_name is provided, process just that scene
+if [ ! -z "$SCENE_NAME" ]; then
+    echo "Running feature fusion for single scene: $SCENE_NAME"
     
     # Run feature fusion on specific scene
     python feature_fusion.py \
         --data_dir ${DATA_DIR} \
-        --scene_id ${SCENE_ID}
+        --scene_name ${SCENE_NAME}
     
 # Otherwise, process all scenes in the data directory
 else
