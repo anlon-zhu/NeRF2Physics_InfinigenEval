@@ -11,17 +11,6 @@
 # Script for installing Nerfstudio on a compute cluster
 echo "Starting Nerfstudio installation on $(hostname) at $(date)"
 
-# Clean conda and pip caches first to free up space
-echo "Cleaning caches to free up disk space..."
-rm -rf ~/.cache/pip
-mkdir -p ~/.cache/pip
-rm -rf ~/.conda/pkgs/*
-mkdir -p ~/.conda/pkgs
-
-# Remove any temporary conda files
-rm -rf ~/.conda/envs/*/conda-meta/history
-rm -rf ~/.conda/envs/*/lib/python*/site-packages/pip/_internal/cache/*
-
 # Check user's quota and available disk space
 echo "User quota information:"
 quota -s || echo "Quota command not available"
@@ -31,7 +20,7 @@ df -h $HOME
 
 # Load necessary modules and environment
 module load anaconda3
-export PATH=/n/fs/pvl-progen/anlon/envs/nerf2phy/nerf2phy/bin:$PATH
+export PATH=/n/fs/vl/anlon/envs/nerf2phy/bin:$PATH
 
 # Print environment info
 echo "Python version: $(python --version)"
