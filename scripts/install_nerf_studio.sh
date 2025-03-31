@@ -30,9 +30,42 @@ export PATH=/n/fs/pvl-progen/anlon/envs/nerf2phy/nerf2phy/bin:$PATH
 echo "Python version: $(python --version)"
 echo "Conda environment: $CONDA_PREFIX"
 
-# Explicitly set CUDA paths to ensure version compatibility
-export CUDA_HOME=/n/fs/pvl-progen/anlon/envs/nerf2phy/nerf2phy
+# Find and set proper CUDA paths
+echo "Looking for CUDA installation..."
+module load cuda/11.8
+
+# Try to locate CUDA installation
+for possible_cuda_path in /usr/local/cuda-11.8 /usr/local/cuda /n/fs/pvl-progen/anlon/envs/nerf2phy/nerf2phy /opt/conda
+do
+    if [ -d "$possible_cuda_path/bin" ] && [ -f "$possible_cuda_path/bin/nvcc" ]; then
+        export CUDA_HOME="$possible_cuda_path"
+        echo "Found CUDA at: $CUDA_HOME"
+        break
+    fi
+done
+
+# Add CUDA to path and library path
+export PATH=$CUDA_HOME/bin:$PATH
 export LD_LIBRARY_PATH=$CUDA_HOME/lib64:$LD_LIBRARY_PATH
+
+# Verify NVCC is available
+if command -v nvcc >/dev/null 2>&1; then
+    echo "NVCC found: $(which nvcc)"
+    echo "NVCC version: $(nvcc --version | head -n 1)"
+else
+    echo "WARNING: NVCC not found in PATH. Will attempt to install CUDA toolkit."
+    
+    # Try to install CUDA toolkit
+    conda install -c "nvidia/label/cuda-11.8.0" cuda-toolkit -y --no-cache-dir
+    
+    # Check again for NVCC
+    if command -v nvcc >/dev/null 2>&1; then
+        echo "NVCC now available at: $(which nvcc)"
+    else
+        echo "ERROR: NVCC still not available after installation attempt."
+        echo "Will try to continue, but tiny-cuda-nn may fail to install."
+    fi
+fi
 
 # Uninstall conflicting packages
 echo "Removing existing packages..."
@@ -56,8 +89,29 @@ pip install ninja --no-cache-dir
 
 # Setting environment variables for tiny-cuda-nn compilation
 export TCNN_CUDA_ARCHITECTURES="60;70;75;80;86"
-echo "Installing tiny-cuda-nn from source..."
-pip install git+https://github.com/NVlabs/tiny-cuda-nn/#subdirectory=bindings/torch --no-cache-dir
+
+# Try alternative approach using pre-built wheels first
+echo "Attempting to install pre-built tiny-cuda-nn wheel..."
+pip install --no-cache-dir tinycudann
+
+# If that fails, try source installation with our detected CUDA path
+if [ $? -ne 0 ]; then
+    echo "Pre-built wheel installation failed, trying source installation..."
+    
+    # Create environment file to help tiny-cuda-nn detect CUDA properly
+    echo "Creating custom environment for tiny-cuda-nn build..."
+    export TCNN_CUDA_HOME="$CUDA_HOME"
+    export CUDACXX="$CUDA_HOME/bin/nvcc"
+    
+    # Try pip install with explicit path to nvcc
+    pip install --no-cache-dir git+https://github.com/NVlabs/tiny-cuda-nn/#subdirectory=bindings/torch
+    
+    # If still failing, try the colmap version which has fewer CUDA requirements
+    if [ $? -ne 0 ]; then
+        echo "Standard tiny-cuda-nn installation failed, trying nerfstudio's fork..."
+        pip install --no-cache-dir git+https://github.com/nerfstudio-project/tiny-cuda-nn/#subdirectory=bindings/torch
+    fi
+fi
 
 # Install Nerfstudio with minimal dependencies
 echo "Installing Nerfstudio..."
