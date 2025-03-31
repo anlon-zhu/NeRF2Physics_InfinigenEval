@@ -99,6 +99,42 @@ def create_empty_points3d_file(output_path):
     
     print(f"Created empty points3D.txt at {output_path}")
 
+def create_transforms_json(output_path, image_data, K, hw):
+    """Create transforms.json file required by Nerfstudio"""
+    height, width = hw
+    fx, fy = K[0, 0], K[1, 1]
+    cx, cy = K[0, 2], K[1, 2]
+    
+    frames = []
+    for idx, (image_name, T) in enumerate(image_data):
+        # Extract rotation matrix and translation vector from T matrix
+        c2w = np.eye(4)
+        c2w[:3, :3] = T[:3, :3]
+        c2w[:3, 3] = T[:3, 3]
+        
+        frame = {
+            "file_path": f"./images/{image_name}",
+            "transform_matrix": c2w.tolist(),
+            "colmap_im_id": idx + 1  # 1-based IDs for COLMAP
+        }
+        frames.append(frame)
+    
+    transforms_json = {
+        "camera_model": "PINHOLE",
+        "fl_x": float(fx),
+        "fl_y": float(fy),
+        "cx": float(cx),
+        "cy": float(cy),
+        "w": int(width),
+        "h": int(height),
+        "frames": frames
+    }
+    
+    with open(output_path, 'w') as f:
+        json.dump(transforms_json, f, indent=2)
+    
+    print(f"Created transforms.json at {output_path}")
+
 def organize_for_nerfstudio(input_dir, output_dir, scene_id=None):
     """Organize Infinigen data for NeRF Studio"""
     input_dir = Path(input_dir)
@@ -184,7 +220,11 @@ def organize_for_nerfstudio(input_dir, output_dir, scene_id=None):
     # Create empty points3D.txt
     create_empty_points3d_file(colmap_dir / "points3D.txt")
     
+    # Create transforms.json file required by Nerfstudio
+    create_transforms_json(scene_dir / "transforms.json", image_data, K, hw)
+    
     print(f"\nSuccessfully organized data for NeRF Studio at {scene_dir}")
+    print(f"Created transforms.json file for Nerfstudio")
     print(f"Now you can run ns_reconstruction.py with --data_dir {output_dir}")
     print(f"The data is organized in the expected directory structure: {output_dir}/scenes/{scene_id}/")
 
