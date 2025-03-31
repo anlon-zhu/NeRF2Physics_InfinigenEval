@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --job-name=install_ns
-#SBATCH --output=install_ns_%j.out
-#SBATCH --error=install_ns_%j.err
+#SBATCH --output=/path/to/logs/%u/%x_%j.out
+#SBATCH --error=/path/to/logs/%u/%x_%j.err
 #SBATCH --partition=pvl
 #SBATCH --account=pvl
 #SBATCH --time=30:00
@@ -92,30 +92,74 @@ if ! check_pytorch_version; then
     echo "Checking system CUDA version..."
     if command -v nvcc &> /dev/null; then
         CUDA_VERSION=$(nvcc --version | grep "release" | awk '{print $6}' | cut -c2-)
-        echo "System CUDA version: $CUDA_VERSION"
+        CUDA_MAJOR=$(echo $CUDA_VERSION | cut -d. -f1)
+        CUDA_MINOR=$(echo $CUDA_VERSION | cut -d. -f2)
+        echo "System CUDA version: $CUDA_MAJOR.$CUDA_MINOR"
         
         # Choose appropriate PyTorch version based on CUDA version
-        if [[ "$CUDA_VERSION" == 12.* ]]; then
-            echo "Detected CUDA 12.x, installing PyTorch with CUDA 12.1 support"
-            TORCH_CUDA="cu121"
+        if [[ "$CUDA_MAJOR" == "12" ]]; then
+            if [[ "$CUDA_MINOR" -ge "1" ]]; then
+                echo "Detected CUDA 12.x, installing PyTorch with CUDA 12.1 support"
+                TORCH_CUDA="cu121"
+            else
+                echo "Detected CUDA 12.0, falling back to CUDA 11.8 for PyTorch"
+                TORCH_CUDA="cu118"
+            fi
+        elif [[ "$CUDA_MAJOR" == "11" ]]; then
+            if [[ "$CUDA_MINOR" -ge "8" ]]; then
+                echo "Detected CUDA 11.8+, installing PyTorch with CUDA 11.8 support"
+                TORCH_CUDA="cu118"
+            elif [[ "$CUDA_MINOR" -ge "7" ]]; then
+                echo "Detected CUDA 11.7, installing PyTorch with CUDA 11.7 support"
+                TORCH_CUDA="cu117"
+            elif [[ "$CUDA_MINOR" -ge "3" ]]; then
+                echo "Detected CUDA 11.3-11.6, installing PyTorch with CUDA 11.3 support"
+                TORCH_CUDA="cu113"
+            else
+                echo "Detected CUDA 11.0-11.2, falling back to CUDA 11.3 for PyTorch"
+                TORCH_CUDA="cu113"
+            fi
         else
-            echo "Using CUDA 11.8 support"
+            echo "CUDA version $CUDA_MAJOR.$CUDA_MINOR not directly supported, using CUDA 11.8 for PyTorch"
             TORCH_CUDA="cu118"
         fi
     else
         echo "nvcc not found, defaulting to CUDA 11.8 support"
         TORCH_CUDA="cu118"
+        CUDA_MAJOR="11"
+        CUDA_MINOR="8"
+        CUDA_VERSION="11.8"
     fi
+    
+    # Save CUDA version for later use with tiny-cuda-nn
+    SYSTEM_CUDA_VERSION="$CUDA_VERSION"
+    SYSTEM_CUDA_MAJOR="$CUDA_MAJOR"
+    SYSTEM_CUDA_MINOR="$CUDA_MINOR"
 
     # Install PyTorch with appropriate CUDA version
     echo "Installing PyTorch with $TORCH_CUDA..."
     pip uninstall torch torchvision -y || true
-    pip install torch==2.1.2+$TORCH_CUDA torchvision==0.16.2+$TORCH_CUDA --extra-index-url https://download.pytorch.org/whl/$TORCH_CUDA
     
-    # Install CUDA toolkit if using CUDA 11.8
-    if [[ "$TORCH_CUDA" == "cu118" ]]; then
-        echo "Installing CUDA toolkit using conda..."
+    # Use appropriate PyTorch version based on detected CUDA
+    if [[ "$TORCH_CUDA" == "cu121" ]]; then
+        echo "Installing PyTorch with CUDA 12.1 support"
+        pip install torch==2.1.2+cu121 torchvision==0.16.2+cu121 --extra-index-url https://download.pytorch.org/whl/cu121
+    elif [[ "$TORCH_CUDA" == "cu118" ]]; then
+        echo "Installing PyTorch with CUDA 11.8 support"
+        pip install torch==2.1.2+cu118 torchvision==0.16.2+cu118 --extra-index-url https://download.pytorch.org/whl/cu118
+        
+        # Install CUDA 11.8 toolkit for better compatibility
+        echo "Installing CUDA 11.8 toolkit using conda..."
         conda install -c "nvidia/label/cuda-11.8.0" cuda-toolkit -y
+    elif [[ "$TORCH_CUDA" == "cu117" ]]; then
+        echo "Installing PyTorch with CUDA 11.7 support"
+        pip install torch==2.1.2+cu117 torchvision==0.16.2+cu117 --extra-index-url https://download.pytorch.org/whl/cu117
+    elif [[ "$TORCH_CUDA" == "cu113" ]]; then
+        echo "Installing PyTorch with CUDA 11.3 support"
+        pip install torch==2.1.2+cu113 torchvision==0.16.2+cu113 --extra-index-url https://download.pytorch.org/whl/cu113
+    else
+        echo "Unknown CUDA version, falling back to CUDA 11.8"
+        pip install torch==2.1.2+cu118 torchvision==0.16.2+cu118 --extra-index-url https://download.pytorch.org/whl/cu118
     fi
 
     # Verify torch installation
@@ -131,54 +175,73 @@ if ! check_tinycudann; then
     pip install ninja cmake setuptools wheel
     
     echo "Installing tiny-cuda-nn..."
-    # Try using pip install approach first
     pip uninstall -y tinycudann tiny-cuda-nn || true
     
-    # Detect CUDA version for tiny-cuda-nn compatibility
-    if command -v nvcc &> /dev/null; then
-        CUDA_VERSION=$(nvcc --version | grep "release" | awk '{print $6}' | cut -c2-)
-        CUDA_MAJOR=$(echo $CUDA_VERSION | cut -d. -f1)
-        CUDA_MINOR=$(echo $CUDA_VERSION | cut -d. -f2)
-        echo "Detected CUDA version for tiny-cuda-nn: $CUDA_MAJOR.$CUDA_MINOR"
+    # Get CUDA version from PyTorch (preferred) or fallback to system version
+    PYTORCH_CUDA_VERSION=$(python -c "import torch; print(torch.version.cuda)" 2>/dev/null)
+    if [ -n "$PYTORCH_CUDA_VERSION" ]; then
+        echo "Using PyTorch's CUDA version: $PYTORCH_CUDA_VERSION"
+        CUDA_VERSION="$PYTORCH_CUDA_VERSION"
+    else
+        echo "PyTorch CUDA version not detected, using system CUDA version"
+        CUDA_VERSION="$SYSTEM_CUDA_VERSION"
+    fi
+    
+    CUDA_MAJOR=$(echo $CUDA_VERSION | cut -d. -f1)
+    CUDA_MINOR=$(echo $CUDA_VERSION | cut -d. -f2)
+    echo "Using CUDA version for tiny-cuda-nn: $CUDA_MAJOR.$CUDA_MINOR"
 
-        # Try to find a matching wheel based on CUDA version
-        if [ "$CUDA_MAJOR" = "11" ] && [ "$CUDA_MINOR" -ge "7" ]; then
+    # Try to install pre-built wheel first
+    if [ "$CUDA_MAJOR" = "12" ]; then
+        echo "Installing tiny-cuda-nn for CUDA 12.x"
+        pip install "git+https://github.com/NerfStudio-official/tinycudann-wheels.git@master#subdirectory=cuda118"
+    elif [ "$CUDA_MAJOR" = "11" ]; then
+        if [ "$CUDA_MINOR" -ge "7" ]; then
             echo "Installing tiny-cuda-nn for CUDA 11.7+"
             pip install "git+https://github.com/NerfStudio-official/tinycudann-wheels.git@master#subdirectory=cuda117"
-        elif [ "$CUDA_MAJOR" = "11" ] && [ "$CUDA_MINOR" -ge "3" ]; then
+        elif [ "$CUDA_MINOR" -ge "3" ]; then
             echo "Installing tiny-cuda-nn for CUDA 11.3+"
             pip install "git+https://github.com/NerfStudio-official/tinycudann-wheels.git@master#subdirectory=cuda113"
-        elif [ "$CUDA_MAJOR" = "12" ]; then
-            echo "Installing tiny-cuda-nn for CUDA 12.x"
-            pip install "git+https://github.com/NerfStudio-official/tinycudann-wheels.git@master#subdirectory=cuda118"
-        else
-            # Fall back to source installation
-            echo "No pre-built wheel available, attempting source installation"
-            export TCNN_CUDA_ARCHITECTURES="60,61,70,75,80,86"
-            pip install git+https://github.com/nvlabs/tiny-cuda-nn/#subdirectory=bindings/torch || {
-                echo "Pip install failed, falling back to manual compilation..."
+        fi
+    fi
+    
+    # Check if installation worked, if not try source installation
+    if ! python -c "import tinycudann as tcnn" &>/dev/null; then
+        echo "Pre-built wheel installation failed, attempting source installation"
+        
+        # Setup compile environment
+        export TCNN_CUDA_ARCHITECTURES="60,61,70,75,80,86"
+        
+        # Use gcc-11 if available
+        if command -v gcc-11 &> /dev/null && command -v g++-11 &> /dev/null; then
+            echo "Using GCC/G++ version 11 for compilation"
+            export CC=gcc-11
+            export CXX=g++-11
+        fi
+        
+        # Try to set CUDA_HOME
+        if [ -d "/usr/local/cuda-$CUDA_MAJOR.$CUDA_MINOR" ]; then
+            export CUDA_HOME="/usr/local/cuda-$CUDA_MAJOR.$CUDA_MINOR"
+        fi
+        
+        # Attempt installation
+        if command -v nvcc &> /dev/null; then
+            echo "Attempting pip install with nvcc..."
+            CUDACXX=$(which nvcc) pip install git+https://github.com/nvlabs/tiny-cuda-nn/#subdirectory=bindings/torch || {
+                echo "Direct installation failed, attempting manual compilation..."
                 TMP_DIR=$(mktemp -d)
-                git clone https://github.com/NVlabs/tiny-cuda-nn.git $TMP_DIR/tiny-cuda-nn
+                git clone --depth=1 https://github.com/NVlabs/tiny-cuda-nn.git $TMP_DIR/tiny-cuda-nn
                 cd $TMP_DIR/tiny-cuda-nn/bindings/torch
                 python setup.py install
                 cd - > /dev/null
             }
+        else
+            echo "NVCC not found, tiny-cuda-nn installation may not be possible"
+            echo "Installing nerfstudio without tiny-cuda-nn (some features may be slower)"
         fi
-    else
-        # If nvcc is not available, try source installation
-        echo "NVCC not found, attempting source installation"
-        export TCNN_CUDA_ARCHITECTURES="60,61,70,75,80,86"
-        pip install git+https://github.com/nvlabs/tiny-cuda-nn/#subdirectory=bindings/torch || {
-            echo "Pip install failed, falling back to manual compilation..."
-            TMP_DIR=$(mktemp -d)
-            git clone https://github.com/NVlabs/tiny-cuda-nn.git $TMP_DIR/tiny-cuda-nn
-            cd $TMP_DIR/tiny-cuda-nn/bindings/torch
-            python setup.py install
-            cd - > /dev/null
-        }
     fi
     
-    # Verify the installation
+    # Verify installation
     python -c "import tinycudann as tcnn; print('tiny-cuda-nn version:', tcnn.__version__)" || 
         echo "Warning: tiny-cuda-nn installation failed but continuing with nerfstudio installation"
 else
@@ -205,13 +268,23 @@ echo "Testing final installation..."
 python -c "
 import torch
 import numpy
-import tinycudann
 print('PyTorch version:', torch.__version__)
 print('NumPy version:', numpy.__version__)
 print('CUDA available:', torch.cuda.is_available())
+print('PyTorch CUDA version:', torch.version.cuda)
 print('GPU device count:', torch.cuda.device_count())
 if torch.cuda.is_available():
     print('GPU name:', torch.cuda.get_device_name(0))
+
+# Try to import tinycudann, but don't fail if not available
+try:
+    import tinycudann
+    print('tiny-cuda-nn version:', tinycudann.__version__)
+    print('tiny-cuda-nn is working correctly')
+except ImportError:
+    print('tiny-cuda-nn is not installed. Some operations may be slower.')
+except Exception as e:
+    print('tiny-cuda-nn is installed but encountered an error:', str(e))
 "
 
 echo "Installation completed at $(date)"
