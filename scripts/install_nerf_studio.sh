@@ -38,15 +38,10 @@ mkdir -p ~/.cache/pip
 echo "Checking disk space..."
 df -h ~/.cache
 
-# Check for NumPy version and fix if needed
-python -c "import numpy; print('Current NumPy version:', numpy.__version__)"
-if python -c "import numpy; from packaging import version; exit(0 if version.parse(numpy.__version__) < version.parse('2.0.0') else 1)"; then
-    echo "NumPy version is below 2.0, which is good for compatibility"
-else
-    echo "NumPy version is 2.0+, downgrading to 1.24.3 for better compatibility"
-    pip uninstall numpy -y
-    pip install numpy==1.24.3
-fi
+# Force NumPy 1.24.3 installation regardless of current version
+echo "Installing NumPy 1.24.3 for compatibility..."
+pip uninstall numpy -y
+pip install numpy==1.24.3
 
 # Check existing CUDA version on the system
 echo "Checking system CUDA version..."

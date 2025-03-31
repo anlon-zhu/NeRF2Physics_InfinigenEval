@@ -30,7 +30,7 @@ if __name__ == '__main__':
             '--experiment_name', scene,
             '--max_num_iterations', str(args.training_iters),
             '--pipeline.model.background-color', 'random',
-            '--pipeline.datamanager.camera-optimizer.mode', 'off',
+            '--pipeline.model.camera-optimizer.mode', 'off',
             '--pipeline.model.proposal-initial-sampler', 'uniform',
             '--pipeline.model.near-plane', str(args.near_plane),
             '--pipeline.model.far-plane', str(args.far_plane),
