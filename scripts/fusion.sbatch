@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --job-name=clip_fusion
-#SBATCH --output=/n/fs/scratch/az4244/nerf2physics/logs/%x_%j.out
-#SBATCH --error=/n/fs/scratch/az4244/nerf2physics/logs/%x_%j.err
+#SBATCH --output=/n/fs/scratch/%u/nerf2physics/logs/%x_%j.out
+#SBATCH --error=/n/fs/scratch/%u/nerf2physics/logs/%x_%j.err
 #SBATCH --partition=pvl
 #SBATCH --account=pvl
 #SBATCH --time=4:00:00
@@ -22,4 +22,4 @@ cd /n/fs/pvl-progen/anlon/NeRF2Physics_InfinigenEval
 
 # Run the script with arguments
 # You can modify scene_name and other parameters as needed
-python feature_fusion.py --data_dir /n/fs/scratch/az4244/nerf2physics/data/abo_500/
+python feature_fusion.py --data_dir /n/fs/scratch/${USER}/nerf2physics/data/abo_500/

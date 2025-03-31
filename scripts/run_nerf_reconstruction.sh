@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --job-name=nerf_reconstruct
-#SBATCH --output=/n/fs/scratch/${USER}/nerf2physics/logs/%x_%j.out
-#SBATCH --error=/n/fs/scratch/${USER}/nerf2physics/logs/%x_%j.err
+#SBATCH --output=/n/fs/scratch/%u/nerf2physics/logs/%x_%j.out
+#SBATCH --error=/n/fs/scratch/%u/nerf2physics/logs/%x_%j.err
 #SBATCH --partition=pvl
 #SBATCH --account=pvl
 #SBATCH --time=24:00:00

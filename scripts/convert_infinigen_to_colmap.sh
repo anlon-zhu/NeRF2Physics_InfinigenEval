@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --job-name=colmap_convert
-#SBATCH --output=/n/fs/scratch/${USER}/nerf2physics/logs/%x_%j.out
-#SBATCH --error=/n/fs/scratch/${USER}/nerf2physics/logs/%x_%j.err
+#SBATCH --output=/n/fs/scratch/%u/nerf2physics/logs/%x_%j.out
+#SBATCH --error=/n/fs/scratch/%u/nerf2physics/logs/%x_%j.err
 #SBATCH --partition=pvl
 #SBATCH --account=pvl
 #SBATCH --time=4:00:00
@@ -20,8 +20,9 @@ INFINIGEN_DIR=$1
 OUTPUT_DIR=$2
 SCENE_ID=$3
 
-# Create output directory if it doesn't exist
+# Create output and logs directories if they don't exist
 mkdir -p ${OUTPUT_DIR}
+mkdir -p /n/fs/scratch/${USER}/nerf2physics/logs
 
 # Activate conda environment
 module load anaconda3
