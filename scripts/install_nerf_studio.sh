@@ -38,10 +38,12 @@ mkdir -p ~/.cache/pip
 echo "Checking disk space..."
 df -h ~/.cache
 
-# Force NumPy 1.24.3 installation regardless of current version
+# Install NumPy 1.24.3 if not already installed, uninstall first
 echo "Installing NumPy 1.24.3 for compatibility..."
-pip uninstall numpy -y
-pip install numpy==1.24.3
+if ! pip show numpy | grep -q "Version: 1.24.3"; then
+    pip uninstall numpy -y
+    pip install numpy==1.24.3
+fi
 
 # Check existing CUDA version on the system
 echo "Checking system CUDA version..."
@@ -65,9 +67,11 @@ else
     TORCH_CUDA="cu118"
 fi
 
-# Clean previous installations
-echo "Removing previous PyTorch installations..."
-pip uninstall torch torchvision functorch tinycudann -y
+# Clean previous installations if version does not match
+if ! pip show torch | grep -q "Version: 2.1.2"; then
+    echo "Removing previous PyTorch installations..."
+    pip uninstall torch torchvision functorch tinycudann -y
+fi
 
 # Install PyTorch with appropriate CUDA version
 echo "Installing PyTorch with $TORCH_CUDA..."
@@ -88,11 +92,34 @@ python -c "import torch; print('PyTorch version:', torch.__version__); print('CU
 # Install dependencies and nerfstudio
 echo "Installing ninja..."
 pip install ninja
+python -c "import ninja; print('ninja version:', ninja.__version__)"
 
 echo "Installing tiny-cuda-nn..."
+# Install prerequisites and clean previous installations
+echo "Installing/upgrading prerequisite packages..."
+pip install --upgrade cmake ninja setuptools wheel
+
+# Clean previous installations if any
+pip uninstall -y tinycudann tiny-cuda-nn
+
+# Set environment variables for compilation
 echo "Setting TCNN_CUDA_ARCHITECTURES environment variable to support multiple architectures"
 export TCNN_CUDA_ARCHITECTURES="6.0;6.1;7.0;7.5;8.0;8.6"
-pip install git+https://github.com/NVlabs/tiny-cuda-nn/#subdirectory=bindings/torch
+
+# Install using the direct method
+echo "Cloning tiny-cuda-nn repository..."
+TMP_DIR=$(mktemp -d)
+cd $TMP_DIR
+git clone https://github.com/NVlabs/tiny-cuda-nn.git
+cd tiny-cuda-nn/bindings/torch
+
+echo "Building tiny-cuda-nn from source..."
+python setup.py install
+
+# Verify the installation
+cd $OLDPWD  # Return to previous directory
+echo "Verifying tiny-cuda-nn installation..."
+python -c "import tinycudann as tcnn; print('tiny-cuda-nn version:', tcnn.__version__)" || echo "Warning: tiny-cuda-nn installation failed but continuing with nerfstudio installation"
 
 echo "Installing nerfstudio..."
 pip install nerfstudio
