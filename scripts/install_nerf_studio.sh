@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --job-name=install_ns
-#SBATCH --output=/path/to/logs/%u/%x_%j.out
-#SBATCH --error=/path/to/logs/%u/%x_%j.err
+#SBATCH --output=install_ns_%j.out
+#SBATCH --error=install_ns_%j.err
 #SBATCH --partition=pvl
 #SBATCH --account=pvl
 #SBATCH --time=30:00
