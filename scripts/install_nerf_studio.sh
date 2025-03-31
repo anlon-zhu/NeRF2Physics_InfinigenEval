@@ -109,27 +109,53 @@ echo "Cleaning disk space..."
 rm -rf ~/.conda/pkgs/* || echo "Warning: Could not clean conda packages"
 rm -rf ~/.cache/pip/* || echo "Warning: Could not clean pip cache"
 
-# Clean previous installations if any
+# Clean previous installations
 pip uninstall -y tinycudann tiny-cuda-nn
 
-# Set environment variables for compilation - use integers not floats
-echo "Setting TCNN_CUDA_ARCHITECTURES environment variable to support multiple architectures"
-export TCNN_CUDA_ARCHITECTURES="60,61,70,75,80,86"
+# First attempt: Try installing a pre-built wheel that matches our CUDA version
+echo "Attempting to install pre-built tiny-cuda-nn wheel..."
 
-# Install using the direct method
-echo "Cloning tiny-cuda-nn repository..."
-TMP_DIR=$(mktemp -d)
-cd $TMP_DIR
-git clone https://github.com/NVlabs/tiny-cuda-nn.git
-cd tiny-cuda-nn/bindings/torch
+# Determine CUDA major.minor version
+CUDA_VERSION=$(nvcc --version | grep "release" | awk '{print $6}' | cut -c2-)
+CUDA_MAJOR=$(echo $CUDA_VERSION | cut -d. -f1)
+CUDA_MINOR=$(echo $CUDA_VERSION | cut -d. -f2)
+echo "Detected CUDA version: $CUDA_MAJOR.$CUDA_MINOR"
 
-echo "Building tiny-cuda-nn from source..."
-# Add debug output to diagnose issues
-echo "CUDA Architecture setting: $TCNN_CUDA_ARCHITECTURES"
-python -c "import os; print('Python sees TCNN_CUDA_ARCHITECTURES=', os.environ.get('TCNN_CUDA_ARCHITECTURES', 'Not set'))"
+# Try to find a matching wheel based on CUDA version
+if [ "$CUDA_MAJOR" = "11" ] && [ "$CUDA_MINOR" -ge "7" ]; then
+    echo "Installing tiny-cuda-nn for CUDA 11.7+"
+    pip install "git+https://github.com/NerfStudio-official/tinycudann-wheels.git@master#subdirectory=cuda117"
 
-# Run setup with verbose output
-python setup.py install -v
+elif [ "$CUDA_MAJOR" = "11" ] && [ "$CUDA_MINOR" -ge "3" ]; then
+    echo "Installing tiny-cuda-nn for CUDA 11.3+"
+    pip install "git+https://github.com/NerfStudio-official/tinycudann-wheels.git@master#subdirectory=cuda113"
+
+elif [ "$CUDA_MAJOR" = "12" ]; then
+    echo "Installing tiny-cuda-nn for CUDA 12.x"
+    pip install "git+https://github.com/NerfStudio-official/tinycudann-wheels.git@master#subdirectory=cuda118"
+
+else
+    echo "No pre-built wheel available for CUDA $CUDA_MAJOR.$CUDA_MINOR, attempting source installation"
+    
+    # Set environment variables for compilation - use integers not floats
+    echo "Setting TCNN_CUDA_ARCHITECTURES environment variable to support multiple architectures"
+    export TCNN_CUDA_ARCHITECTURES="60,61,70,75,80,86"
+    
+    # Try using pip install approach first (simpler)
+    echo "Attempting pip install of tiny-cuda-nn..."
+    pip install git+https://github.com/nvlabs/tiny-cuda-nn/#subdirectory=bindings/torch
+    
+    # If that fails, fall back to manual compilation
+    if [ $? -ne 0 ]; then
+        echo "Pip install failed, falling back to manual compilation..."
+        TMP_DIR=$(mktemp -d)
+        cd $TMP_DIR
+        git clone https://github.com/NVlabs/tiny-cuda-nn.git
+        cd tiny-cuda-nn/bindings/torch
+        python setup.py install
+        cd $OLDPWD
+    fi
+fi
 
 # Verify the installation
 cd $OLDPWD  # Return to previous directory
