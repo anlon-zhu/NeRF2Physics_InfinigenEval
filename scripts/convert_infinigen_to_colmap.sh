@@ -31,6 +31,10 @@ export PATH=/n/fs/pvl-progen/anlon/envs/nerf2phy/nerf2phy/bin:$PATH
 # Navigate to the project directory
 cd /n/fs/pvl-progen/anlon/NeRF2Physics_InfinigenEval
 
+# Add timing information
+echo "[$(date)] Starting conversion process"
+START_TIME=$(date +%s)
+
 # If scene_id is provided, process just that scene
 if [ ! -z "$SCENE_ID" ]; then
     echo "Converting single scene: $SCENE_ID"
@@ -57,5 +61,10 @@ else
             --scene_id ${scene}
     done
 fi
+
+# Record end time and calculate duration
+END_TIME=$(date +%s)
+ELAPSED_TIME=$((END_TIME - START_TIME))
+echo "[$(date)] Conversion completed in ${ELAPSED_TIME} seconds ($(($ELAPSED_TIME / 60)) minutes)"
 
 echo "COLMAP conversion complete. Data is ready for NeRF reconstruction."

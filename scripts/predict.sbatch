@@ -20,6 +20,15 @@ export PATH=/n/fs/pvl-progen/anlon/envs/nerf2phy/nerf2phy/bin:$PATH
 # Navigate to the directory
 cd /n/fs/pvl-progen/anlon/NeRF2Physics_InfinigenEval
 
+# Add timing information
+echo "[$(date)] Starting property prediction process"
+START_TIME=$(date +%s)
+
 # Run the script with arguments
 # You can modify property_name, scene_name and other parameters as needed
 python predict_property.py --property_name density --data_dir /n/fs/scratch/${USER}/nerf2physics/data/abo_500/
+
+# Record end time and calculate duration
+END_TIME=$(date +%s)
+ELAPSED_TIME=$((END_TIME - START_TIME))
+echo "[$(date)] Property prediction process completed in ${ELAPSED_TIME} seconds ($(($ELAPSED_TIME / 60)) minutes)"
