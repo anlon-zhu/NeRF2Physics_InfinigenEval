@@ -106,7 +106,10 @@ def organize_for_nerfstudio(input_dir, output_dir, scene_id=None):
         scene_id = input_dir.name
     
     output_dir = Path(output_dir)
-    scene_dir = output_dir / scene_id
+    # Create scenes directory to match structure expected by ns_reconstruction.py
+    scenes_dir = output_dir / "scenes"
+    os.makedirs(scenes_dir, exist_ok=True)
+    scene_dir = scenes_dir / scene_id
     os.makedirs(scene_dir, exist_ok=True)
     
     # Create COLMAP directories
@@ -183,6 +186,7 @@ def organize_for_nerfstudio(input_dir, output_dir, scene_id=None):
     
     print(f"\nSuccessfully organized data for NeRF Studio at {scene_dir}")
     print(f"Now you can run ns_reconstruction.py with --data_dir {output_dir}")
+    print(f"The data is organized in the expected directory structure: {output_dir}/scenes/{scene_id}/")
 
 if __name__ == "__main__":
     args = parse_args()
