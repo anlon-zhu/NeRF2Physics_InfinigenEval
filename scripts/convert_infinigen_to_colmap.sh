@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --job-name=colmap_convert
-#SBATCH --output=/n/fs/scratch/%u/logs/%x_%j.out
-#SBATCH --error=/n/fs/scratch/%u/logs/%x_%j.err
+#SBATCH --output=/n/fs/scratch/${USER}/nerf2physics/logs/%x_%j.out
+#SBATCH --error=/n/fs/scratch/${USER}/nerf2physics/logs/%x_%j.err
 #SBATCH --partition=pvl
 #SBATCH --account=pvl
 #SBATCH --time=4:00:00
@@ -12,7 +12,7 @@
 # Check arguments
 if [ "$#" -lt 2 ]; then
     echo "Usage: $0 <infinigen_dir> <output_dir> [scene_id]"
-    echo "Example: $0 /n/fs/scratch/USER/2025-03-30_02-32_density_gt_1 /n/fs/scratch/USER/nerf_data 18015bf3"
+    echo "Example: $0 /n/fs/scratch/${USER}/2025-03-30_02-32_density_gt_1 /n/fs/scratch/${USER}/nerf2physics/infinigen_nerf_data 18015bf3"
     exit 1
 fi
 

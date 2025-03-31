@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --job-name=nerf_reconstruct
-#SBATCH --output=/n/fs/scratch/%u/logs/%x_%j.out
-#SBATCH --error=/n/fs/scratch/%u/logs/%x_%j.err
+#SBATCH --output=/n/fs/scratch/${USER}/nerf2physics/logs/%x_%j.out
+#SBATCH --error=/n/fs/scratch/${USER}/nerf2physics/logs/%x_%j.err
 #SBATCH --partition=pvl
 #SBATCH --account=pvl
 #SBATCH --time=24:00:00
@@ -13,13 +13,13 @@
 # Check arguments
 if [ "$#" -lt 1 ]; then
     echo "Usage: $0 <data_dir> [scene_id] [training_iters] [near_plane] [far_plane]"
-    echo "Example: $0 /n/fs/scratch/USER/nerf_data 18015bf3 20000 0.4 6.0"
+    echo "Example: $0 /n/fs/scratch/${USER}/nerf2physics/infinigen_nerf_data 18015bf3 10000 0.4 6.0"
     exit 1
 fi
 
 # Set up environment variables
-export HF_HOME=/n/fs/scratch/%u/nerf2physics/hf_cache
-export TORCH_HOME=/n/fs/scratch/%u/nerf2physics/torch_cache
+export HF_HOME=/n/fs/scratch/${USER}/nerf2physics/hf_cache
+export TORCH_HOME=/n/fs/scratch/${USER}/nerf2physics/torch_cache
 
 DATA_DIR=$1
 SCENE_ID=$2
