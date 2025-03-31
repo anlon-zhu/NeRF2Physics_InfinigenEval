@@ -32,10 +32,9 @@ echo "Conda environment: $CONDA_PREFIX"
 
 # Find and set proper CUDA paths
 echo "Looking for CUDA installation..."
-module load cuda/11.8
 
-# Try to locate CUDA installation
-for possible_cuda_path in /usr/local/cuda-11.8 /usr/local/cuda /n/fs/pvl-progen/anlon/envs/nerf2phy/nerf2phy /opt/conda
+# Try to locate CUDA installation without relying on modules
+for possible_cuda_path in /usr/local/cuda /n/fs/pvl-progen/anlon/envs/nerf2phy/nerf2phy /opt/conda /usr/local/cuda-* 
 do
     if [ -d "$possible_cuda_path/bin" ] && [ -f "$possible_cuda_path/bin/nvcc" ]; then
         export CUDA_HOME="$possible_cuda_path"
@@ -48,23 +47,39 @@ done
 export PATH=$CUDA_HOME/bin:$PATH
 export LD_LIBRARY_PATH=$CUDA_HOME/lib64:$LD_LIBRARY_PATH
 
-# Verify NVCC is available
+# Verify NVCC is available and get CUDA version
 if command -v nvcc >/dev/null 2>&1; then
     echo "NVCC found: $(which nvcc)"
     echo "NVCC version: $(nvcc --version | head -n 1)"
-else
-    echo "WARNING: NVCC not found in PATH. Will attempt to install CUDA toolkit."
     
-    # Try to install CUDA toolkit
-    conda install -c "nvidia/label/cuda-11.8.0" cuda-toolkit -y --no-cache-dir
+    # Extract CUDA version number for PyTorch installation
+    CUDA_VERSION=$(nvcc --version | grep "release" | awk '{print $6}' | cut -c2-)
+    CUDA_MAJOR=$(echo $CUDA_VERSION | cut -d. -f1)
+    CUDA_MINOR=$(echo $CUDA_VERSION | cut -d. -f2)
+    echo "Detected CUDA version: $CUDA_MAJOR.$CUDA_MINOR"
     
-    # Check again for NVCC
-    if command -v nvcc >/dev/null 2>&1; then
-        echo "NVCC now available at: $(which nvcc)"
+    # For PyTorch compatibility, we'll use the closest supported version
+    if [ "$CUDA_MAJOR" = "12" ]; then
+        # For CUDA 12.x, use PyTorch with CUDA 11.8 for now (best compatibility)
+        PYTORCH_CUDA="cu118"
+        echo "Using PyTorch with CUDA 11.8 for compatibility with CUDA 12.x"
+    elif [ "$CUDA_MAJOR" = "11" ]; then
+        if [ "$CUDA_MINOR" -ge "8" ]; then
+            PYTORCH_CUDA="cu118"
+        elif [ "$CUDA_MINOR" -ge "6" ]; then
+            PYTORCH_CUDA="cu116"
+        else
+            PYTORCH_CUDA="cu113"
+        fi
+        echo "Using PyTorch with CUDA $PYTORCH_CUDA"
     else
-        echo "ERROR: NVCC still not available after installation attempt."
-        echo "Will try to continue, but tiny-cuda-nn may fail to install."
+        # Default to 11.8 if we can't determine version
+        PYTORCH_CUDA="cu118"
+        echo "Using default PyTorch with CUDA 11.8"
     fi
+else
+    echo "ERROR: NVCC not found. Cannot continue with CUDA installation."
+    exit 1
 fi
 
 # Uninstall conflicting packages
@@ -75,9 +90,9 @@ pip uninstall -y torch torchvision functorch tinycudann numpy
 echo "Installing NumPy 1.24..."
 pip install numpy==1.24.3
 
-# Install PyTorch 2.1.2 with CUDA 11.8
-echo "Installing PyTorch with CUDA 11.8..."
-pip install torch==2.1.2+cu118 torchvision==0.16.2+cu118 --extra-index-url https://download.pytorch.org/whl/cu118 --no-cache-dir
+# Install PyTorch 2.1.2 with appropriate CUDA version
+echo "Installing PyTorch with CUDA ${PYTORCH_CUDA}..."
+pip install torch==2.1.2+${PYTORCH_CUDA} torchvision==0.16.2+${PYTORCH_CUDA} --extra-index-url https://download.pytorch.org/whl/${PYTORCH_CUDA} --no-cache-dir
 
 # Print CUDA info
 echo "CUDA information after PyTorch installation:"
