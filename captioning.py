@@ -14,7 +14,10 @@ CAPTIONING_PROMPT = "Question: Give a detailed description of the object. Answer
 
 def load_blip2(model_name, device='cuda'):
     processor = AutoProcessor.from_pretrained(model_name)
-    model = Blip2ForConditionalGeneration.from_pretrained(model_name, torch_dtype=torch.float16)
+    # Load with FP32 first then convert specific components to ensure consistency
+    model = Blip2ForConditionalGeneration.from_pretrained(model_name)
+    # Convert entire model to FP32 for consistency
+    model = model.to(torch.float32)
     model = model.to(device)
     model.eval()
     return model, processor
@@ -34,9 +37,9 @@ def display_model_size(model):
 
 def generate_text(img, model, processor, prompt=CAPTIONING_PROMPT, device='cuda'):
     if prompt is not None:
-        inputs = processor(img, text=prompt, return_tensors="pt").to(device, torch.float16)
+        inputs = processor(img, text=prompt, return_tensors="pt").to(device)
     else:
-        inputs = processor(img, return_tensors="pt").to(device, torch.float16)
+        inputs = processor(img, return_tensors="pt").to(device)
     
     generated_ids = model.generate(**inputs, max_new_tokens=30)
     generated_text = processor.batch_decode(generated_ids, skip_special_tokens=True)[0].strip()

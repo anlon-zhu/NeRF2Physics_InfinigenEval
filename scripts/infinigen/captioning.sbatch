@@ -68,3 +68,9 @@ fi
 END_TIME=$(date +%s)
 ELAPSED_TIME=$((END_TIME - START_TIME))
 echo "[$(date)] Infinigen captioning process completed in ${ELAPSED_TIME} seconds ($(($ELAPSED_TIME / 60)) minutes)"
+
+
+# Record end time and calculate duration
+END_TIME=$(date +%s)
+ELAPSED_TIME=$((END_TIME - START_TIME))
+echo "[$(date)] Infinigen captioning process completed in ${ELAPSED_TIME} seconds ($(($ELAPSED_TIME / 60)) minutes)"
