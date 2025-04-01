@@ -87,14 +87,29 @@ def load_images(img_dir, bg_change=255, return_masks=False):
     imgs = []
     masks = []
     for img_file in img_files:
-        # load RGBA image
+        # Load image (can be RGB or RGBA)
         img = np.array(Image.open(os.path.join(img_dir, img_file)))
+        
+        # Check if the image has an alpha channel (4 channels)
+        has_alpha = img.shape[2] == 4
+        
         if return_masks or bg_change is not None:
-            mask = img[:, :, 3] > 0
-            if bg_change is not None:
+            if has_alpha:
+                # Use alpha channel for mask if available
+                mask = img[:, :, 3] > 0
+            else:
+                # If no alpha channel, assume everything is foreground
+                mask = np.ones((img.shape[0], img.shape[1]), dtype=bool)
+                
+            if bg_change is not None and has_alpha:
                 img[~mask] = bg_change
             masks.append(mask)
-        imgs.append(img[:, :, :3])
+            
+        # Always use the RGB channels (first 3)
+        if has_alpha:
+            imgs.append(img[:, :, :3])
+        else:
+            imgs.append(img)  # Already RGB
         
     if return_masks:
         return imgs, masks
