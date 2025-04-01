@@ -31,11 +31,6 @@ echo "Conda environment: $CONDA_PREFIX"
 echo "Installing specific NumPy version..."
 pip install numpy==1.26.0
 
-# Uninstall existing PyTorch and CUDA if version is not 12.8
-if [ $(python -c "import torch; print(torch.version.cuda)") != "12.8" ]; then
-    pip uninstall -y torch torchvision
-fi
-
 # Install PyTorch with CUDA 12.x (to match system detection of 12.8)
 pip install torch==2.2.0+cu121 torchvision==0.17.0+cu121 --extra-index-url https://download.pytorch.org/whl/cu121
 
@@ -49,12 +44,9 @@ which nvcc || echo "nvcc not found in PATH"
 # Install tiny-cuda-nn with the correct CUDA version and architecture flags
 # Targeting multiple GPU architectures for maximum compatibility
 echo "Installing tiny-cuda-nn..."
-# Set TCNN_CUDA_ARCHITECTURES to target all common GPU types in the cluster
-# 60,61: Pascal (P100)
-# 70: Volta (V100)
-# 75: Turing (RTX 2080)
-# 80,86: Ampere (A100, RTX 3090)
-export TCNN_CUDA_ARCHITECTURES="60;61;70;75;80;86"
+# Set TCNN_CUDA_ARCHITECTURES to target RTX 2080 (compute capability 75)
+# This enables FullyFusedMLP for optimal performance
+export TCNN_CUDA_ARCHITECTURES="75"
 CUDA_HOME=/usr/local/cuda-12.8 pip install ninja git+https://github.com/NVlabs/tiny-cuda-nn/#subdirectory=bindings/torch
 
 # Install Nerfstudio with minimal dependencies
