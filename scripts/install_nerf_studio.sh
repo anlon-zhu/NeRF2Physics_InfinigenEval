@@ -5,7 +5,7 @@
 #SBATCH --partition=pvl
 #SBATCH --account=pvl
 #SBATCH --time=30:00
-#SBATCH --gres=gpu:RTX3090:10
+#SBATCH --gres=gpu:1
 #SBATCH --mem=8G
 
 # Script for installing Nerfstudio on a compute cluster
