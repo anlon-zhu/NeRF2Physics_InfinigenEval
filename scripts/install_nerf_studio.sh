@@ -26,6 +26,16 @@ export PATH=/n/fs/vl/anlon/envs/nerf2phy/bin:$PATH
 echo "Python version: $(python --version)"
 echo "Conda environment: $CONDA_PREFIX"
 
+
+# Pin NumPy to exact version for consistent behavior across environments
+echo "Installing specific NumPy version..."
+pip install numpy==1.26.0
+
+# Uninstall existing PyTorch and CUDA if version is not 12.8
+if [ $(python -c "import torch; print(torch.version.cuda)") != "12.8" ]; then
+    pip uninstall -y torch torchvision
+fi
+
 # Install PyTorch with CUDA 12.x (to match system detection of 12.8)
 pip install torch==2.2.0+cu121 torchvision==0.17.0+cu121 --extra-index-url https://download.pytorch.org/whl/cu121
 
@@ -46,11 +56,6 @@ echo "Installing tiny-cuda-nn..."
 # 80,86: Ampere (A100, RTX 3090)
 export TCNN_CUDA_ARCHITECTURES="60;61;70;75;80;86"
 CUDA_HOME=/usr/local/cuda-12.8 pip install ninja git+https://github.com/NVlabs/tiny-cuda-nn/#subdirectory=bindings/torch
-
-
-# Pin NumPy to exact version for consistent behavior across environments
-echo "Installing specific NumPy version..."
-pip install numpy==1.24.3
 
 # Install Nerfstudio with minimal dependencies
 echo "Installing Nerfstudio..."
