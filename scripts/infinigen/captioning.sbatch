@@ -7,7 +7,7 @@
 #SBATCH --time=4:00:00
 #SBATCH --mem=64G
 #SBATCH --cpus-per-task=4
-#SBATCH --gres=gpu:4
+#SBATCH --gres=gpu:rtx_3090:1
 
 # Check arguments
 if [ "$#" -lt 1 ]; then
@@ -29,6 +29,9 @@ export TOKENIZERS_PARALLELISM=false
 export CUDA_LAUNCH_BLOCKING=1
 # Force model to use half precision (FP16) instead of mixed precision
 export TORCH_DTYPE="float16"
+
+# Set PyTorch memory management variables to avoid fragmentation
+export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 
 # Activate conda environment
 module load anaconda3
