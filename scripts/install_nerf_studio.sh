@@ -36,9 +36,15 @@ echo "Verifying CUDA access:"
 # Check if CUDA tools like nvcc are available
 which nvcc || echo "nvcc not found in PATH"
 
-# Install tiny-cuda-nn with the correct CUDA version
-# Since we detected CUDA 12.8 on the system, we need compatible versions
+# Install tiny-cuda-nn with the correct CUDA version and architecture flags
+# Targeting multiple GPU architectures for maximum compatibility
 echo "Installing tiny-cuda-nn..."
+# Set TCNN_CUDA_ARCHITECTURES to target all common GPU types in the cluster
+# 60,61: Pascal (P100)
+# 70: Volta (V100)
+# 75: Turing (RTX 2080)
+# 80,86: Ampere (A100, RTX 3090)
+export TCNN_CUDA_ARCHITECTURES="60;61;70;75;80;86"
 CUDA_HOME=/usr/local/cuda-12.8 pip install ninja git+https://github.com/NVlabs/tiny-cuda-nn/#subdirectory=bindings/torch
 
 
