@@ -29,7 +29,7 @@ FAR_PLANE=${5:-6.0}         # Default to 6.0 if not provided
 
 # Activate conda environment
 module load anaconda3
-export PATH=/n/fs/pvl-progen/anlon/envs/nerf2phy/nerf2phy/bin:$PATH
+export PATH=/n/fs/vl/anlon/envs/nerf2phy/bin:$PATH
 
 # Navigate to the project directory
 cd /n/fs/pvl-progen/anlon/NeRF2Physics_InfinigenEval
