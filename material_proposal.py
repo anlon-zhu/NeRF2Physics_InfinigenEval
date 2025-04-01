@@ -19,6 +19,8 @@ BASE_SEED = 100
 def gpt_wrapper(gpt_fn, parse_fn, max_tries=10, sleep_time=3):
     """Wrap gpt_fn with error handling and retrying."""
     tries = 0
+    gpt_response = None
+    result = None
     # sleep to avoid overloading openai api
     time.sleep(sleep_time)
     try:
@@ -34,9 +36,14 @@ def gpt_wrapper(gpt_fn, parse_fn, max_tries=10, sleep_time=3):
         try:
             gpt_response = gpt_fn(BASE_SEED + tries)
             result = parse_fn(gpt_response)
-        except:
+        except Exception as error:
+            print('error on retry:', error)
             result = None
-    return gpt_response
+    if result is None:
+        print('Failed to get valid response after', tries + 1, 'attempts')
+        if gpt_response is None:
+            raise RuntimeError('All attempts to call the GPT API failed')
+    return result
 
 
 def show_img_to_caption(scene_dir, idx_to_caption):
