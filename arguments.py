@@ -69,8 +69,8 @@ def get_args():
                         help='candidate materials save name (default: info_new)')
     
     # Physical property prediction (uses property_name argument from above)
-    parser.add_argument('--mats_load_name', type=str, default="info",
-                        help='candidate materials load name (default: info)')
+    parser.add_argument('--mats_load_name', type=str, default="info_new",
+                        help='candidate materials load name (default: info_new)')
     parser.add_argument('--feature_load_name', type=str, default="ps56",
                         help='feature load name (default: ps56)')
     parser.add_argument('--prediction_mode', type=str, default="integral",
