@@ -5,9 +5,9 @@
 #SBATCH --partition=pvl
 #SBATCH --account=pvl
 #SBATCH --time=4:00:00
-#SBATCH --mem=32G
+#SBATCH --mem=64G
 #SBATCH --cpus-per-task=4
-#SBATCH --gres=gpu:1
+#SBATCH --gres=gpu:4
 
 # Check arguments
 if [ "$#" -lt 1 ]; then
@@ -27,8 +27,8 @@ export TORCH_HOME=/n/fs/scratch/${USER}/nerf2physics/torch_cache
 export TRANSFORMERS_NO_ADVISORY_WARNINGS=1
 export TOKENIZERS_PARALLELISM=false
 export CUDA_LAUNCH_BLOCKING=1
-# Force model to use full precision (FP32) instead of mixed precision
-export TORCH_DTYPE="float32"
+# Force model to use half precision (FP16) instead of mixed precision
+export TORCH_DTYPE="float16"
 
 # Activate conda environment
 module load anaconda3
