@@ -23,6 +23,13 @@ SCENE_NAME=$2
 export HF_HOME=/n/fs/scratch/${USER}/nerf2physics/hf_cache
 export TORCH_HOME=/n/fs/scratch/${USER}/nerf2physics/torch_cache
 
+# Force consistent precision for BLIP-2 model
+export TRANSFORMERS_NO_ADVISORY_WARNINGS=1
+export TOKENIZERS_PARALLELISM=false
+export CUDA_LAUNCH_BLOCKING=1
+# Force model to use full precision (FP32) instead of mixed precision
+export TORCH_DTYPE="float32"
+
 # Activate conda environment
 module load anaconda3
 export PATH=/n/fs/vl/anlon/envs/nerf2phy/bin:$PATH
