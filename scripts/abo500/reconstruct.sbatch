@@ -7,7 +7,7 @@
 #SBATCH --time=24:00:00
 #SBATCH --mem=64G
 #SBATCH --cpus-per-task=8
-#SBATCH --gres=gpu:1
+#SBATCH --gres=gpu:RTX3090:10
 
 # Set up environment variables
 export HF_HOME=/n/fs/scratch/${USER}/nerf2physics/hf_cache

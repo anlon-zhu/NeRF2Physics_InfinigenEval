@@ -5,7 +5,7 @@
 #SBATCH --partition=pvl
 #SBATCH --account=pvl
 #SBATCH --time=30:00
-#SBATCH --gres=gpu:1
+#SBATCH --gres=gpu:RTX3090:10
 #SBATCH --mem=8G
 
 # Script for installing Nerfstudio on a compute cluster
@@ -41,6 +41,10 @@ which nvcc || echo "nvcc not found in PATH"
 echo "Installing tiny-cuda-nn..."
 CUDA_HOME=/usr/local/cuda-12.8 pip install ninja git+https://github.com/NVlabs/tiny-cuda-nn/#subdirectory=bindings/torch
 
+
+# Pin NumPy to exact version for consistent behavior across environments
+echo "Installing specific NumPy version..."
+pip install numpy==1.24.3
 
 # Install Nerfstudio with minimal dependencies
 echo "Installing Nerfstudio..."
