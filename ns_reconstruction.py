@@ -56,9 +56,7 @@ if __name__ == '__main__':
             '--num-points', str(args.num_points),
             '--remove-outliers', 'True',
             '--normal-method', 'open3d',
-            '--use-bounding-box', 'True',
-            '--bounding-box-min', str(-half_bbox_size), str(-half_bbox_size), str(-half_bbox_size),
-            '--bounding-box-max', str(half_bbox_size), str(half_bbox_size), str(half_bbox_size),
+            '--num-rays-per-batch', '16384'
         ])
 
         # Calling ns-render 
