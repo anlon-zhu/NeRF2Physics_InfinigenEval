@@ -7,7 +7,7 @@
 #SBATCH --time=4:00:00
 #SBATCH --mem=32G
 #SBATCH --cpus-per-task=4
-#SBATCH --gres=gpu:rtx_3090:10
+#SBATCH --gres=gpu:1
 
 # Check arguments
 if [ "$#" -lt 1 ]; then
