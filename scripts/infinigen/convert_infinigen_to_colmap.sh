@@ -41,9 +41,20 @@ START_TIME=$(date +%s)
 if [ ! -z "$SCENE_ID" ]; then
     echo "Converting single scene: $SCENE_ID"
     
+    # Check if we're pointing to the scenes directory or a parent directory
+    if [[ "${INFINIGEN_DIR}" == */scenes ]]; then
+        # We're already pointing to the scenes directory
+        scene_path="${INFINIGEN_DIR}/${SCENE_ID}"
+    else
+        # We're pointing to a parent directory that contains scenes/
+        scene_path="${INFINIGEN_DIR}/scenes/${SCENE_ID}"
+    fi
+    
+    echo "Scene path: $scene_path"
+    
     # Convert to COLMAP format
     python infinigen_to_colmap.py \
-        --input_dir ${INFINIGEN_DIR}/${SCENE_ID} \
+        --input_dir ${scene_path} \
         --output_dir ${OUTPUT_DIR} \
         --scene_id ${SCENE_ID}
     
@@ -51,8 +62,19 @@ if [ ! -z "$SCENE_ID" ]; then
 else
     echo "Processing all scenes in: $INFINIGEN_DIR"
     
+    # Check if we're pointing to the scenes directory or a parent directory
+    if [[ "${INFINIGEN_DIR}" == */scenes ]]; then
+        # We're already pointing to the scenes directory
+        scenes_dir="${INFINIGEN_DIR}"
+    else
+        # We're pointing to a parent directory that contains scenes/
+        scenes_dir="${INFINIGEN_DIR}/scenes"
+    fi
+    
+    echo "Scenes directory: $scenes_dir"
+    
     # Process each subdirectory
-    for scene_dir in ${INFINIGEN_DIR}/*/; do
+    for scene_dir in ${scenes_dir}/*/; do
         scene=$(basename "$scene_dir")
         echo "Converting scene: $scene"
         

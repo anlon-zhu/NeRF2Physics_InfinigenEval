@@ -139,35 +139,39 @@ def organize_for_nerfstudio(input_dir, output_dir, scene_id=None):
     """Convert Infinigen data to COLMAP format for NeRF Studio
     
     This function assumes data is already organized by organize_data.sh script with structure:
-    input_dir/
-      scenes/
-        scene_id/
-          images/
-            camera_0/
-              *.png
-          camview/
-            camera_0/
-              *.npz
+    /path/to/data/scenes/scene_id/
+      images/
+        camera_0/
+          *.png
+      camview/
+        camera_0/
+          *.npz
     """
     input_dir = Path(input_dir)
+    print(f"Input directory: {input_dir}")
     
-    # If scene_id is not provided, use the base directory name
+    # Auto-detect directory structure
+    # If scene_id is not provided, use the input directory name
     if scene_id is None:
-        if (input_dir / "scenes").exists():
-            # User provided the base directory, list available scenes
-            scenes = [d.name for d in (input_dir / "scenes").iterdir() if d.is_dir()]
-            if not scenes:
-                raise FileNotFoundError(f"No scene directories found in {input_dir / 'scenes'}")
-            print(f"Available scenes: {', '.join(scenes)}")
-            scene_id = scenes[0]  # Default to first scene
-            print(f"Using first scene: {scene_id}")
-        else:
-            raise FileNotFoundError(f"No 'scenes' directory found in {input_dir}")
+        scene_id = input_dir.name
+        print(f"Using input directory name as scene_id: {scene_id}")
     
-    # Navigate to the specific scene directory
-    scene_dir = input_dir / "scenes" / scene_id
-    if not scene_dir.exists():
-        raise FileNotFoundError(f"Scene directory {scene_dir} not found")
+    # Check if input_dir is already the scene directory
+    # Look for camview and images directories
+    if (input_dir / "camview").exists() and (input_dir / "images").exists():
+        # This is already the scene directory
+        scene_dir = input_dir
+        print(f"Input directory is already a scene directory containing camview/ and images/")
+    else:
+        print(f"Input directory is not a scene directory, looking for scene {scene_id}")
+        # Otherwise, it might be a parent directory
+        if (input_dir / scene_id).exists():
+            # Scene directory is directly in input_dir
+            scene_dir = input_dir / scene_id
+            print(f"Found scene directory at {scene_dir}")
+        else:
+            # Not found, error
+            raise FileNotFoundError(f"Scene directory {scene_id} not found in {input_dir}")
     
     # Make sure output directory exists
     output_dir = Path(output_dir)
@@ -198,11 +202,18 @@ def organize_for_nerfstudio(input_dir, output_dir, scene_id=None):
     create_colmap_cameras_file(colmap_dir / "cameras.txt", K, hw)
     
     # Check if images exist (should already be copied by organize_data.sh)
-    image_files = sorted([f for f in os.listdir(images_dir) if f.endswith('.png') or f.endswith('.exr')])
-    if not image_files:
-        raise FileNotFoundError(f"No image files found in {images_dir}")
-    
-    print(f"Found {len(image_files)} images in {images_dir}")
+    try:
+        image_files = sorted([f for f in os.listdir(images_dir) if f.endswith('.png') or f.endswith('.exr')])
+        if not image_files:
+            raise FileNotFoundError(f"No image files found in {images_dir}")
+        
+        print(f"Found {len(image_files)} images in {images_dir}")
+    except Exception as e:
+        print(f"Error accessing image directory: {e}")
+        print(f"Directory structure: {scene_dir} contains {os.listdir(scene_dir)}")
+        if (scene_dir / "images").exists():
+            print(f"Images directory exists: {scene_dir / 'images'} contains {os.listdir(scene_dir / 'images')}")
+        raise
     
     # Collect all image data
     image_data = []
