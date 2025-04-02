@@ -32,25 +32,25 @@ export PATH=/n/fs/vl/anlon/envs/nerf2phy/bin:$PATH
 cd /n/fs/pvl-progen/anlon/NeRF2Physics_InfinigenEval
 
 # Add timing information
-echo "[$(date)] Starting Infinigen property prediction process"
+echo "[$(date)] Starting Infinigen per-point density prediction process"
 START_TIME=$(date +%s)
 
 # If scene_name is provided, process just that scene
 if [ ! -z "$SCENE_NAME" ]; then
-    echo "Predicting property ${PROPERTY_NAME} for scene: $SCENE_NAME"
+    echo "Predicting point-wise ${PROPERTY_NAME} for scene: $SCENE_NAME"
     
-    # Run property prediction on specific scene
-    python predict_property.py \
+    # Run query_density.py on specific scene
+    python query_density.py \
         --property_name ${PROPERTY_NAME} \
         --data_dir ${DATA_DIR} \
         --scene_name ${SCENE_NAME}
     
 # Otherwise, process all scenes in the data directory
 else
-    echo "Predicting property ${PROPERTY_NAME} for all scenes in: $DATA_DIR"
+    echo "Predicting point-wise ${PROPERTY_NAME} for all scenes in: $DATA_DIR"
     
-    # Run property prediction on all scenes
-    python predict_property.py \
+    # Run query_density.py on all scenes
+    python query_density.py \
         --property_name ${PROPERTY_NAME} \
         --data_dir ${DATA_DIR}
 fi
@@ -58,4 +58,4 @@ fi
 # Record end time and calculate duration
 END_TIME=$(date +%s)
 ELAPSED_TIME=$((END_TIME - START_TIME))
-echo "[$(date)] Infinigen property prediction process completed in ${ELAPSED_TIME} seconds ($(($ELAPSED_TIME / 60)) minutes)"
+echo "[$(date)] Infinigen per-point density prediction process completed in ${ELAPSED_TIME} seconds ($(($ELAPSED_TIME / 60)) minutes)"
