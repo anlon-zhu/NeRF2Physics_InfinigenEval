@@ -15,15 +15,31 @@ if __name__ == '__main__':
     args = get_args()
 
     scenes_dir = os.path.join(args.data_dir, 'scenes')
-    scenes = get_scenes_list(args)
+    
+    # If a specific scene name is provided, only process that scene
+    if hasattr(args, 'scene_name') and args.scene_name:
+        scenes = [args.scene_name]
+        print(f"Processing single scene: {args.scene_name}")
+    else:
+        scenes = get_scenes_list(args)
+        print(f"Processing {len(scenes)} scenes from directory")
 
     for scene in scenes: 
-        base_dir = os.path.join(scenes_dir, scene, 'ns')
+        print(f"Starting reconstruction for scene: {scene}")
+        
+        # Verify the scene directory exists
+        scene_dir = os.path.join(scenes_dir, scene)
+        if not os.path.isdir(scene_dir):
+            print(f"Error: Scene directory {scene_dir} does not exist, skipping")
+            continue
+            
+        base_dir = os.path.join(scene_dir, 'ns')
+        os.makedirs(base_dir, exist_ok=True)
 
-        # Calling ns-train
-        result = subprocess.run([
+        # Calling ns-train with explicit logging of command
+        cmd = [
             'ns-train', 'nerfacto',
-            '--data', os.path.join(scenes_dir, scene),
+            '--data', scene_dir,
             '--output_dir', base_dir,
             '--vis', args.vis_mode,
             '--project_name', args.project_name,
@@ -35,7 +51,10 @@ if __name__ == '__main__':
             '--pipeline.model.near-plane', str(args.near_plane),
             '--pipeline.model.far-plane', str(args.far_plane),
             '--steps-per-eval-image', '10000',
-        ])
+        ]
+        
+        print(f"Running command: {' '.join(cmd)}")
+        result = subprocess.run(cmd)
 
         ns_dir = get_last_file_in_folder(os.path.join(base_dir, '%s/nerfacto' % scene))
 

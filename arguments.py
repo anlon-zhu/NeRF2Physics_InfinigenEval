@@ -7,6 +7,8 @@ def get_args():
     # General arguments
     parser.add_argument('--data_dir', type=str, default="./data/abo_500/",
                         help='path to data (default: ./data/abo_500/)')
+    parser.add_argument('--scene_name', type=str, default=None,
+                        help='specific scene to process (overrides all other scene selection params)')
     parser.add_argument('--split', type=str, default="all",
                         help='dataset split, either train, val, train+val, test, or all (default: all)')
     parser.add_argument('--start_idx', type=int, default=0,
