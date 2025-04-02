@@ -8,6 +8,8 @@
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=4
 #SBATCH --mem=16G
+#SBATCH --mail-type=BEGIN,END,FAIL
+#SBATCH --mail-user=az4244@princeton.edu
 
 # Check arguments
 if [ "$#" -lt 2 ]; then

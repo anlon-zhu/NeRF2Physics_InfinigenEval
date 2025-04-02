@@ -7,8 +7,10 @@
 #SBATCH --time=24:00:00
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=8
-#SBATCH --mem=64G
+#SBATCH --mem=128G
 #SBATCH --gres=gpu:rtx_2080:1
+#SBATCH --mail-type=BEGIN,END,FAIL
+#SBATCH --mail-user=az4244@princeton.edu
 
 # Check arguments
 if [ "$#" -lt 1 ]; then

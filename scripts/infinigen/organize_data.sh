@@ -26,6 +26,53 @@ echo "[$(date)] Starting organization process"
 TOTAL_SEEDS=0
 SKIPPED_SEEDS=0
 
+# Check if metadata.json already exists and load existing seeds
+METADATA_FILE="${OUTPUT_BASE}/metadata.json"
+if [ -f "$METADATA_FILE" ]; then
+    echo "Found existing metadata.json, will update it with new seeds"
+    
+    # Extract existing seeds into an associative array for quick lookup
+    declare -A existing_seeds
+    
+    # Use jq if available, otherwise fallback to grep + sed
+    if command -v jq &> /dev/null; then
+        mapfile -t existing_seed_list < <(jq -r '.included_seeds[].seed' "$METADATA_FILE")
+        mapfile -t existing_source_list < <(jq -r '.included_seeds[].source' "$METADATA_FILE")
+        
+        # Load existing included seeds
+        for i in "${!existing_seed_list[@]}"; do
+            seed_id="${existing_seed_list[$i]}"
+            source_id="${existing_source_list[$i]}"
+            existing_seeds["$seed_id"]="$source_id"
+            included_seeds+=("$seed_id")
+            source_dirs+=("$source_id")
+        done
+        
+        # Load existing skipped seeds
+        mapfile -t existing_skipped < <(jq -r '.skipped_seeds[]' "$METADATA_FILE" 2>/dev/null || echo "")
+        for skipped in "${existing_skipped[@]}"; do
+            if [ ! -z "$skipped" ]; then
+                skipped_seeds+=("$skipped")
+                SKIPPED_SEEDS=$((SKIPPED_SEEDS+1))
+            fi
+        done
+    else
+        echo "Warning: jq not found, using basic text processing to parse existing metadata"
+        # Basic parsing with grep (this is less reliable than jq)
+        while IFS=: read -r key value; do
+            seed=$(echo "$key" | grep -o '"seed"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/"seed"[[:space:]]*:[[:space:]]*"\([^"]*\)"/\1/')
+            source=$(echo "$value" | grep -o '"source"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/"source"[[:space:]]*:[[:space:]]*"\([^"]*\)"/\1/')
+            if [ ! -z "$seed" ] && [ ! -z "$source" ]; then
+                existing_seeds["$seed"]="$source"
+                included_seeds+=("$seed")
+                source_dirs+=("$source")
+            fi
+        done < "$METADATA_FILE"
+    fi
+    
+    echo "Loaded ${#included_seeds[@]} existing seeds and ${#skipped_seeds[@]} skipped seeds from metadata"
+fi
+
 # Process each infinigen output directory
 for infinigen_dir in "${INFINIGEN_DIRS[@]}"; do
     if [ ! -d "$infinigen_dir" ]; then
@@ -46,6 +93,13 @@ for infinigen_dir in "${INFINIGEN_DIRS[@]}"; do
         TOTAL_SEEDS=$((TOTAL_SEEDS+1))
         
         scene_id=$(basename "$scene_dir")
+        
+        # Skip this scene if it already exists in metadata
+        if [ -v existing_seeds["$scene_id"] ]; then
+            echo "  Scene $scene_id already processed, skipping"
+            continue
+        fi
+        
         echo "  Processing scene: $scene_id"
         
         # Create output directories for this scene
@@ -130,8 +184,8 @@ for infinigen_dir in "${INFINIGEN_DIRS[@]}"; do
     done
 done
 
-# Create metadata.json file
-cat > "${OUTPUT_BASE}/metadata.json" << EOL
+# Create/update metadata.json file
+cat > "${OUTPUT_BASE}/metadata.json.new" << EOL
 {
   "included_seeds": [
 $(for i in "${!included_seeds[@]}"; do
@@ -153,8 +207,12 @@ done)
 }
 EOL
 
+# Move the new metadata file into place
+mv "${OUTPUT_BASE}/metadata.json.new" "${OUTPUT_BASE}/metadata.json"
+
 echo "[$(date)] Organization process complete"
-echo "Created metadata.json with information about $(( TOTAL_SEEDS - SKIPPED_SEEDS )) included and $SKIPPED_SEEDS skipped seeds."
+echo "Updated metadata.json with information about ${#included_seeds[@]} included and ${#skipped_seeds[@]} skipped seeds."
+echo "Processed $TOTAL_SEEDS new seeds, skipped $SKIPPED_SEEDS."
 echo
 echo "You can now run convert_infinigen_to_colmap.sh as follows:"
 echo "sbatch scripts/infinigen/convert_infinigen_to_colmap.sh ${OUTPUT_BASE} ${OUTPUT_BASE}/colmap_scenes <scene_id>"

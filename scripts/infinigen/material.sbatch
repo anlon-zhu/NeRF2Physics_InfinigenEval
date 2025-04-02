@@ -8,6 +8,8 @@
 #SBATCH --mem=16G
 #SBATCH --cpus-per-task=2
 #SBATCH --gres=gpu:1
+#SBATCH --mail-type=BEGIN,END,FAIL
+#SBATCH --mail-user=az4244@princeton.edu
 
 # Check arguments
 if [ "$#" -lt 2 ]; then

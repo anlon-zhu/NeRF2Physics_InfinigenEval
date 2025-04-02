@@ -8,6 +8,8 @@
 #SBATCH --mem=32G
 #SBATCH --cpus-per-task=4
 #SBATCH --gres=gpu:1
+#SBATCH --mail-type=BEGIN,END,FAIL
+#SBATCH --mail-user=az4244@princeton.edu
 
 # Check arguments
 if [ "$#" -lt 2 ]; then
@@ -70,6 +72,14 @@ if [ ! -d "$GT_DIR" ]; then
     echo "Will run visualization only, no evaluation metrics will be calculated."
     echo "To enable evaluation, place ground truth density images in: $GT_DIR"
     echo "The images should be named: density_000.png, density_001.png, etc."
+fi
+
+# Check if evaluation results already exist
+OUTPUT_DIR="${SCENE_DIR}/density_evaluation"
+if [ -f "${OUTPUT_DIR}/metrics.json" ]; then
+    echo "Evaluation already completed, skipping..."
+    echo "Results are available at: ${OUTPUT_DIR}"
+    exit 0
 fi
 
 # Add timing information
