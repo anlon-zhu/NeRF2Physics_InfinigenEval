@@ -7,8 +7,6 @@ def get_args():
     # General arguments
     parser.add_argument('--data_dir', type=str, default="./data/abo_500/",
                         help='path to data (default: ./data/abo_500/)')
-    parser.add_argument('--scene_name', type=str, default=None,
-                        help='specific scene to process (overrides all other scene selection params)')
     parser.add_argument('--split', type=str, default="all",
                         help='dataset split, either train, val, train+val, test, or all (default: all)')
     parser.add_argument('--start_idx', type=int, default=0,
@@ -103,8 +101,8 @@ def get_args():
                         help='maximum value to clamp predictions (default: 100.)')
     
     # Visualization
-    parser.add_argument('--scene_name', type=str,
-                        help='scene name for visualization (must be provided)')
+    parser.add_argument('--scene_name', type=str, default=None,
+                        help='scene name for visualization or specific scene to process')
     parser.add_argument('--show', type=int, default=1,
                         help='whether to show interactive viewer (default: 1)')
     parser.add_argument('--compositing_alpha', type=float, default=0.2,
