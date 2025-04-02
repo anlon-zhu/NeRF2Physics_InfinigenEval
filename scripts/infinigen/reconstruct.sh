@@ -14,8 +14,8 @@
 
 # Check arguments
 if [ "$#" -lt 1 ]; then
-    echo "Usage: $0 <data_dir> [scene_name] [training_iters] [near_plane] [far_plane]"
-    echo "Example: $0 /n/fs/scratch/${USER}/nerf2physics/infinigen_nerf_data 18015bf3 10000 0.4 6.0"
+    echo "Usage: $0 <data_dir> [training_iters] [near_plane] [far_plane]  [scene_name]"
+    echo "Example: $0 /n/fs/scratch/${USER}/nerf2physics/infinigen_nerf_data 10000 0.4 6.0 18015bf3"
     exit 1
 fi
 
@@ -24,10 +24,10 @@ export HF_HOME=/n/fs/scratch/${USER}/nerf2physics/hf_cache
 export TORCH_HOME=/n/fs/scratch/${USER}/nerf2physics/torch_cache
 
 DATA_DIR=$1
-SCENE_NAME=$2
-TRAINING_ITERS=${3:-10000}  # Default to 10000 if not provided
-NEAR_PLANE=${4:-0.4}        # Default to 0.4 if not provided
-FAR_PLANE=${5:-6.0}         # Default to 6.0 if not provided
+TRAINING_ITERS=${2:-10000}  # Default to 10000 if not provided
+NEAR_PLANE=${3:-0.4}        # Default to 0.4 if not provided
+FAR_PLANE=${4:-6.0}         # Default to 6.0 if not provided
+SCENE_NAME=$5
 
 # Activate conda environment
 module load anaconda3
