@@ -6,34 +6,87 @@ set -e  # Exit on error
 
 echo "Installing Open3D with headless rendering support..."
 
+# Load anaconda module and set up conda environment
+module load anaconda3
+export PATH=/n/fs/vl/anlon/envs/nerf2phy/bin:$PATH
+
+# Print environment info
+echo "Python version: $(python --version)"
+echo "Conda environment: $CONDA_PREFIX"
+
+# Define installation directories (using filesystem with more space)
+OSMESA_DIR="/n/fs/vl/anlon/osmesa"
+BUILD_DIR="/n/fs/vl/anlon/build_tmp"
+mkdir -p "$OSMESA_DIR" "$BUILD_DIR"
+
 # Function to check if we're on a SLURM node
 is_slurm_node() {
     command -v srun &> /dev/null
 }
 
-# Check if OSMesa is installed
-if ! dpkg -s libosmesa6-dev &> /dev/null; then
-    echo "OSMesa is required for headless rendering."
-    echo "Installing OSMesa..."
+# Check if we already have a local OSMesa installation
+if [ -d "$OSMESA_DIR/lib" ] && [ -f "$OSMESA_DIR/lib/libOSMesa.so" ]; then
+    echo "Found existing OSMesa installation at $OSMESA_DIR"
+else
+    echo "OSMesa not found in $OSMESA_DIR, installing from source..."
     
-    if is_slurm_node; then
-        echo "Detected SLURM environment. You'll need to ask your system administrator to install OSMesa."
-        echo "Please install libosmesa6-dev system-wide or follow the instructions to build from source."
-        echo "See: https://www.open3d.org/docs/latest/tutorial/Advanced/headless_rendering.html"
-        exit 1
-    else
-        # Try to install on Ubuntu-like systems
-        sudo apt-get update
-        sudo apt-get install -y libosmesa6-dev
+    # Check for LLVM - needed for Mesa compilation
+    if ! command -v llvm-config &> /dev/null && ! command -v llvm-config-8 &> /dev/null; then
+        echo "Need LLVM for compiling Mesa. Check if your cluster has LLVM modules"
+        echo "You might need to run: module load llvm"
+        
+        # If on a cluster, try loading LLVM module
+        if is_slurm_node; then
+            echo "Attempting to load LLVM module..."
+            module load llvm 2>/dev/null || module load llvm/8 2>/dev/null || true
+        fi
+        
+        if ! command -v llvm-config &> /dev/null && ! command -v llvm-config-8 &> /dev/null; then
+            echo "LLVM not found and cannot be loaded. Please contact your system administrator."
+            echo "You may need to modify this script to use available LLVM versions."
+            exit 1
+        fi
     fi
+    
+    cd "$BUILD_DIR"
+    
+    # Download Mesa
+    echo "Downloading Mesa 19.0.8..."
+    curl -O https://mesa.freedesktop.org/archive/mesa-19.0.8.tar.xz
+    tar xf mesa-19.0.8.tar.xz
+    cd mesa-19.0.8
+    
+    # Determine LLVM config path
+    LLVM_CONFIG="llvm-config"
+    if command -v llvm-config-8 &> /dev/null; then
+        LLVM_CONFIG="llvm-config-8"
+    fi
+    
+    echo "Using LLVM config: $LLVM_CONFIG"
+    
+    # Configure and build Mesa with OSMesa Gallium driver
+    echo "Configuring Mesa..."
+    LLVM_CONFIG="$LLVM_CONFIG" ./configure --prefix="$OSMESA_DIR" \
+        --disable-osmesa --disable-driglx-direct --disable-gbm --enable-dri \
+        --with-gallium-drivers=swrast --enable-autotools --enable-llvm --enable-gallium-osmesa
+    
+    echo "Compiling Mesa (this may take a while)..."
+    make -j$(nproc)
+    
+    echo "Installing Mesa to $OSMESA_DIR..."
+    make install
+    
+    echo "OSMesa installation complete."
 fi
 
-# Set environment variables for headless rendering
+# Set environment variables for headless rendering and point to our local OSMesa
 export OPEN3D_HEADLESS_RENDERING=ON
-export CMAKE_ARGS="-DENABLE_HEADLESS_RENDERING=ON -DBUILD_GUI=OFF -DUSE_SYSTEM_GLEW=OFF -DUSE_SYSTEM_GLFW=OFF"
+export LD_LIBRARY_PATH="$OSMESA_DIR/lib:$LD_LIBRARY_PATH"
+export CMAKE_ARGS="-DENABLE_HEADLESS_RENDERING=ON -DBUILD_GUI=OFF -DUSE_SYSTEM_GLEW=OFF -DUSE_SYSTEM_GLFW=OFF -DOSMESA_INCLUDE_DIR=$OSMESA_DIR/include -DOSMESA_LIBRARY=$OSMESA_DIR/lib/libOSMesa.so"
 
 # Install Open3D from source
 echo "Installing Open3D from source with headless rendering enabled..."
+pip install --upgrade pip
 pip install open3d --no-binary open3d
 
 # Verify installation
@@ -73,5 +126,3 @@ EOF
 
 echo "Running headless rendering test..."
 python "$TEST_SCRIPT"
-
-echo "Setup complete!"
