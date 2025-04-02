@@ -27,6 +27,14 @@ CMAP_MAX=${4:-5000}
 # Set up environment variables
 export HF_HOME=/n/fs/scratch/${USER}/nerf2physics/hf_cache
 export TORCH_HOME=/n/fs/scratch/${USER}/nerf2physics/torch_cache
+# Set TCNN CUDA architectures for optimal performance
+# Use 60;61 for P100 GPUs, or 75;86 for RTX 2080/3090 GPUs
+export TCNN_CUDA_ARCHITECTURES="75;86"  # Adjust as needed
+export OPEN3D_HEADLESS_RENDERING=ON
+
+# Make sure there's enough space for shader cache
+export XDG_CACHE_HOME="/tmp/${USER}_cache"
+mkdir -p $XDG_CACHE_HOME
 
 # Activate conda environment
 module load anaconda3
