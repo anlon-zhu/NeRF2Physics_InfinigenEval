@@ -136,35 +136,53 @@ def create_transforms_json(output_path, image_data, K, hw):
     print(f"Created transforms.json at {output_path}")
 
 def organize_for_nerfstudio(input_dir, output_dir, scene_id=None):
-    """Organize Infinigen data for NeRF Studio"""
+    """Convert Infinigen data to COLMAP format for NeRF Studio
+    
+    This function assumes data is already organized by organize_data.sh script with structure:
+    input_dir/
+      scenes/
+        scene_id/
+          images/
+            camera_0/
+              *.png
+          camview/
+            camera_0/
+              *.npz
+    """
     input_dir = Path(input_dir)
+    
+    # If scene_id is not provided, use the base directory name
     if scene_id is None:
-        scene_id = input_dir.name
+        if (input_dir / "scenes").exists():
+            # User provided the base directory, list available scenes
+            scenes = [d.name for d in (input_dir / "scenes").iterdir() if d.is_dir()]
+            if not scenes:
+                raise FileNotFoundError(f"No scene directories found in {input_dir / 'scenes'}")
+            print(f"Available scenes: {', '.join(scenes)}")
+            scene_id = scenes[0]  # Default to first scene
+            print(f"Using first scene: {scene_id}")
+        else:
+            raise FileNotFoundError(f"No 'scenes' directory found in {input_dir}")
     
+    # Navigate to the specific scene directory
+    scene_dir = input_dir / "scenes" / scene_id
+    if not scene_dir.exists():
+        raise FileNotFoundError(f"Scene directory {scene_dir} not found")
+    
+    # Make sure output directory exists
     output_dir = Path(output_dir)
-    # Create scenes directory to match structure expected by ns_reconstruction.py
-    scenes_dir = output_dir / "scenes"
-    os.makedirs(scenes_dir, exist_ok=True)
-    scene_dir = scenes_dir / scene_id
-    os.makedirs(scene_dir, exist_ok=True)
+    os.makedirs(output_dir, exist_ok=True)
     
-    # Create COLMAP directories
+    # Create COLMAP directory structure in the scene directory
     colmap_dir = scene_dir / "sparse" / "0"
     os.makedirs(colmap_dir, exist_ok=True)
     
-    images_dir = scene_dir / "images"
-    os.makedirs(images_dir, exist_ok=True)
+    # Expected directories based on organize_data.sh structure
+    images_dir = scene_dir / "images" / "camera_0"
+    camview_dir = scene_dir / "camview" / "camera_0"
     
-    # Get camera parameters from the first camera view
-    frames_dir = input_dir / "frames"
-    camview_dir = frames_dir / "camview" / "camera_0"
-    
-    # Use RGB images
-    image_dir = frames_dir / "Image" / "camera_0"
-    image_suffix = "Image"
-    
-    if not camview_dir.exists() or not image_dir.exists():
-        raise FileNotFoundError(f"Cannot find {camview_dir} or {image_dir}")
+    if not camview_dir.exists() or not images_dir.exists():
+        raise FileNotFoundError(f"Missing required directories: \nImages: {images_dir} (exists: {images_dir.exists()})\nCamera: {camview_dir} (exists: {camview_dir.exists()})")
     
     # Get a list of all camera files
     cam_files = sorted([f for f in os.listdir(camview_dir) if f.endswith(".npz")])

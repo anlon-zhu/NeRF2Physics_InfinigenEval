@@ -47,20 +47,63 @@ def predict_point_densities(args, scene_dir, clip_model, clip_tokenizer):
 def render_density_from_camera_view(points, density_values, w2c, K, hw=(1024, 1024), cmap_min=0, cmap_max=10000):
     """
     Render the density values from a specific camera view.
+    Returns both the RGB visualization and a single-channel image with actual density values.
     """
+    h, w = hw
     # Create point cloud with colors based on density values
     val_pcd = o3d.geometry.PointCloud()
     val_pcd.points = o3d.utility.Vector3dVector(points)
     
-    # Use mean of min-max range for visualization
+    # Use mean of min-max range for visualization and data
     mean_density = np.mean(density_values, axis=1)
+    
+    # Create the colored point cloud for visualization
     colors = values_to_colors(mean_density, cmap_min, cmap_max)
     val_pcd.colors = o3d.utility.Vector3dVector(colors)
     
-    # Render from the camera view
-    rendered_img = render_pcd(val_pcd, w2c, K, hw=hw, show=False)
+    # Render from the camera view to get the RGB visualization
+    rendered_rgb = render_pcd(val_pcd, w2c, K, hw=hw, show=False)
     
-    return rendered_img
+    # Now create a density value map using the same camera parameters
+    # We'll create this directly rather than extracting it from the RGB image
+    
+    # Create a density image filled with zeros (background)
+    density_image = np.zeros(hw)
+    
+    # Project the 3D points to 2D pixel coordinates
+    points_np = np.asarray(val_pcd.points)
+    
+    # Convert from world to camera coordinates
+    pts_cam = (w2c[:3, :3] @ points_np.T).T + w2c[:3, 3]
+    
+    # Project to image coordinates
+    pts_2d = np.zeros((len(pts_cam), 2))
+    # Only project points in front of the camera (z > 0)
+    valid_pts = pts_cam[:, 2] > 0
+    if np.any(valid_pts):
+        pts_2d[valid_pts, 0] = K[0, 0] * pts_cam[valid_pts, 0] / pts_cam[valid_pts, 2] + K[0, 2]
+        pts_2d[valid_pts, 1] = K[1, 1] * pts_cam[valid_pts, 1] / pts_cam[valid_pts, 2] + K[1, 2]
+    
+    # Round to nearest pixel and check if within image bounds
+    pts_2d = np.round(pts_2d).astype(int)
+    in_image = (pts_2d[:, 0] >= 0) & (pts_2d[:, 0] < w) & (pts_2d[:, 1] >= 0) & (pts_2d[:, 1] < h)
+    
+    # Get the points that are both valid (in front of camera) and within image bounds
+    valid_indices = np.where(valid_pts & in_image)[0]
+    
+    if len(valid_indices) > 0:
+        # Sort by depth (furthest first) so closer points overwrite further ones
+        z_depths = pts_cam[valid_indices, 2]
+        sorted_idxs = np.argsort(-z_depths)  # Negative for descending order
+        
+        # Fill in the density values (overwriting as we go from far to near)
+        for idx in sorted_idxs:
+            point_idx = valid_indices[idx]
+            x, y = pts_2d[point_idx]
+            density_image[y, x] = mean_density[point_idx]
+    
+    # Return both the RGB visualization and the density value image
+    return rendered_rgb, density_image
 
 
 def load_ground_truth_density(gt_image_path):
@@ -110,25 +153,39 @@ def load_ground_truth_density(gt_image_path):
         return density_data, vmin, vmax
 
 
-def evaluate_density_against_gt(rendered_density, gt_density, gt_vmin, gt_vmax):
+def evaluate_density_against_gt(rendered_density, rendered_rgb, gt_density, gt_vmin, gt_vmax, is_gt_npy=False):
     """
     Compare rendered density image with ground truth density image.
+    Always use single-valued density for evaluation, while RGB is used only for visualization.
     """
+    # Print shapes for debugging
+    print(f"Rendered density shape: {rendered_density.shape}, Rendered RGB shape: {rendered_rgb.shape}, GT density shape: {gt_density.shape}")
+    
+    # Always use single-channel rendered density values for evaluation
+    rendered_version = rendered_density
+    print("Using single-channel density values for evaluation")
+    
+    # If ground truth is RGB, convert to grayscale for comparison
+    if len(gt_density.shape) == 3 and gt_density.shape[2] == 3:
+        print("Converting RGB ground truth to grayscale for evaluation")
+        gt_density = np.mean(gt_density, axis=2)
+    
     # Resize ground truth if needed
-    if rendered_density.shape[:2] != gt_density.shape[:2]:
+    if rendered_version.shape[:2] != gt_density.shape[:2]:
+        print(f"Resizing ground truth from {gt_density.shape[:2]} to {rendered_version.shape[:2]}")
         gt_density_resized = np.array(Image.fromarray(gt_density).resize(
-            (rendered_density.shape[1], rendered_density.shape[0]), Image.BILINEAR))
+            (rendered_version.shape[1], rendered_version.shape[0]), Image.BILINEAR))
     else:
         gt_density_resized = gt_density
     
     # Scale rendered density to match ground truth range
-    rendered_density_scaled = np.copy(rendered_density)
-    if rendered_density.max() > 0:  # Avoid division by zero
-        # Scale rendered density to the same range as ground truth
-        rendered_min = rendered_density.min()
-        rendered_max = rendered_density.max()
+    rendered_version_scaled = np.copy(rendered_version)
+    if rendered_version.max() > 0:  # Avoid division by zero
+        # Scale rendered version to the same range as ground truth
+        rendered_min = rendered_version.min()
+        rendered_max = rendered_version.max()
         # Linear mapping from [rendered_min, rendered_max] to [gt_vmin, gt_vmax]
-        rendered_density_scaled = ((rendered_density - rendered_min) / (rendered_max - rendered_min)) * (gt_vmax - gt_vmin) + gt_vmin
+        rendered_version_scaled = ((rendered_version - rendered_min) / (rendered_max - rendered_min)) * (gt_vmax - gt_vmin) + gt_vmin
     
     # Normalize both to [0, 1] for comparison
     if gt_density_resized.max() > gt_density_resized.min():
@@ -136,14 +193,18 @@ def evaluate_density_against_gt(rendered_density, gt_density, gt_vmin, gt_vmax):
     else:
         gt_normalized = np.zeros_like(gt_density_resized)
         
-    if rendered_density_scaled.max() > rendered_density_scaled.min():
-        rendered_normalized = (rendered_density_scaled - rendered_density_scaled.min()) / (rendered_density_scaled.max() - rendered_density_scaled.min())
+    if rendered_version_scaled.max() > rendered_version_scaled.min():
+        rendered_normalized = (rendered_version_scaled - rendered_version_scaled.min()) / (rendered_version_scaled.max() - rendered_version_scaled.min())
     else:
-        rendered_normalized = np.zeros_like(rendered_density_scaled)
+        rendered_normalized = np.zeros_like(rendered_version_scaled)
     
     # Convert to prediction format for metrics
+    # Always use single-channel processing
     pixel_values = rendered_normalized.flatten()
     gt_values = gt_normalized.flatten()
+    
+    # Print shapes after flattening for debugging
+    print(f"Flattened pixel values shape: {pixel_values.shape}, GT values shape: {gt_values.shape}")
     
     # Filter out black background pixels
     valid_mask = gt_values > 0.01  # Threshold to avoid background
@@ -152,7 +213,7 @@ def evaluate_density_against_gt(rendered_density, gt_density, gt_vmin, gt_vmax):
     
     # Format for metrics
     valid_pred_ranges = np.stack([valid_pred * 0.8, valid_pred * 1.2], axis=1)  # Create min-max ranges
-    
+        
     # Calculate metrics
     metrics = {
         'ADE': ADE(valid_pred_ranges, valid_gt),
@@ -231,8 +292,8 @@ def run_density_evaluation(args):
         w2c_o3d = w2c.copy()
         w2c_o3d[[1, 2]] *= -1
         
-        # Render density from this view
-        rendered_density = render_density_from_camera_view(
+        # Render density from this view - now returns both RGB visualization and raw density values
+        rendered_rgb, rendered_density = render_density_from_camera_view(
             density_results['points'],
             density_results['density_values'],
             w2c_o3d, K,
@@ -240,33 +301,62 @@ def run_density_evaluation(args):
             cmap_max=cmap_max
         )
         
-        # Save rendered density visualization
+        # Save the RGB visualization 
         plt.figure(figsize=(10, 10))
-        plt.imshow(rendered_density)
+        plt.imshow(rendered_rgb)
         plt.colorbar(label=f'Density (kg/m³) [{cmap_min:.1f} - {cmap_max:.1f}]')
-        plt.title(f'Predicted Density - View {view_idx}')
-        plt.savefig(os.path.join(output_dir, f'predicted_density_view_{view_idx}.png'))
+        plt.title(f'Predicted Density RGB Visualization - View {view_idx}')
+        plt.savefig(os.path.join(output_dir, f'predicted_density_rgb_view_{view_idx}.png'))
         plt.close()
+        
+        # Save the actual density values image
+        plt.figure(figsize=(10, 10))
+        plt.imshow(rendered_density, cmap='inferno')
+        plt.colorbar(label=f'Density (kg/m³) [{cmap_min:.1f} - {cmap_max:.1f}]')
+        plt.title(f'Predicted Density Values - View {view_idx}')
+        plt.savefig(os.path.join(output_dir, f'predicted_density_values_view_{view_idx}.png'))
+        plt.close()
+        
+        # Also save the raw numpy array for later use
+        np.save(os.path.join(output_dir, f'predicted_density_values_view_{view_idx}.npy'), rendered_density)
         
         # Compare with ground truth if available
         if perform_evaluation:
-            gt_file = os.path.join(gt_density_dir, f'density_{view_idx:03d}.png')
+            # First try NPY (single-point density values) with different naming patterns
+            gt_file = os.path.join(gt_density_dir, f'density_{view_idx:03d}.npy')
+            if not os.path.exists(gt_file):
+                gt_file = os.path.join(gt_density_dir, f'density_{view_idx}.npy')
+            
+            # If NPY not found, fall back to PNG (3-channel visualization)
+            if not os.path.exists(gt_file):
+                gt_file = os.path.join(gt_density_dir, f'density_{view_idx:03d}.png')
             if not os.path.exists(gt_file):
                 gt_file = os.path.join(gt_density_dir, f'density_{view_idx}.png')
             
             if os.path.exists(gt_file):
                 gt_data, gt_vmin, gt_vmax = load_ground_truth_density(gt_file)
                 
-                # Evaluate
-                metrics = evaluate_density_against_gt(rendered_density, gt_data, gt_vmin, gt_vmax)
+                # Determine if ground truth is NPY format
+                is_gt_npy = gt_file.endswith('.npy')
+                
+                # Evaluate using the appropriate rendered version based on ground truth format
+                metrics = evaluate_density_against_gt(
+                    rendered_density, 
+                    rendered_rgb, 
+                    gt_data, 
+                    gt_vmin, 
+                    gt_vmax, 
+                    is_gt_npy=is_gt_npy
+                )
                 all_metrics[f'view_{view_idx}'] = metrics
                 
                 # Save comparison visualization
                 plt.figure(figsize=(15, 5))
                 
                 plt.subplot(1, 3, 1)
-                plt.imshow(rendered_density)
-                plt.title('Predicted Density')
+                # For visualization, always show RGB for better visual appeal
+                plt.imshow(rendered_rgb)
+                plt.title('Predicted Density (RGB)')
                 plt.colorbar(label=f'Density (kg/m³) [{cmap_min:.1f} - {cmap_max:.1f}]')
                 
                 plt.subplot(1, 3, 2)
@@ -276,7 +366,10 @@ def run_density_evaluation(args):
                 
                 plt.subplot(1, 3, 3)
                 # Scale for difference visualization
-                norm_rendered = (rendered_density - rendered_density.min()) / (rendered_density.max() - rendered_density.min() + 1e-8)
+                # Always use the single-valued density for difference calculation
+                display_rendered = rendered_density
+                        
+                norm_rendered = (display_rendered - display_rendered.min()) / (display_rendered.max() - display_rendered.min() + 1e-8)
                 norm_gt = (gt_data - gt_data.min()) / (gt_data.max() - gt_data.min() + 1e-8)
                 diff = np.abs(norm_rendered - norm_gt)
                 plt.imshow(diff, cmap='plasma')
