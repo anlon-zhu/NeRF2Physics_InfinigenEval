@@ -1,4 +1,14 @@
 #!/bin/bash
+#SBATCH --job-name=organize_data
+#SBATCH --output=/n/fs/scratch/%u/nerf2physics/logs/%x_%j.out
+#SBATCH --error=/n/fs/scratch/%u/nerf2physics/logs/%x_%j.err
+#SBATCH --partition=pvl
+#SBATCH --account=pvl
+#SBATCH --time=4:00:00
+#SBATCH --mem=16G
+#SBATCH --cpus-per-task=4
+#SBATCH --mail-type=BEGIN,END,FAIL
+#SBATCH --mail-user=az4244@princeton.edu
 
 # Check arguments
 if [ "$#" -lt 2 ]; then
@@ -113,6 +123,7 @@ for infinigen_dir in "${INFINIGEN_DIRS[@]}"; do
             echo "    Warning: No frames directory found in ${scene_dir}, skipping"
             skipped_seeds+=("$scene_id")
             SKIPPED_SEEDS=$((SKIPPED_SEEDS+1))
+            rm -rf "${scene_output_dir}"
             continue
         fi
         
@@ -130,6 +141,10 @@ for infinigen_dir in "${INFINIGEN_DIRS[@]}"; do
             done
         else
             echo "    Warning: No camview directory found in ${scene_dir}/frames, skipping camera parameters"
+            skipped_seeds+=("$scene_id")
+            SKIPPED_SEEDS=$((SKIPPED_SEEDS+1))
+            rm -rf "${scene_output_dir}"
+            continue
         fi
         
         # Copy RGB images for COLMAP
@@ -146,6 +161,10 @@ for infinigen_dir in "${INFINIGEN_DIRS[@]}"; do
             done
         else
             echo "    Warning: No Image directory found in ${scene_dir}/frames, skipping RGB images"
+            skipped_seeds+=("$scene_id")
+            SKIPPED_SEEDS=$((SKIPPED_SEEDS+1))
+            rm -rf "${scene_output_dir}"
+            continue
         fi
         
         # Copy density ground truth images
@@ -176,6 +195,10 @@ for infinigen_dir in "${INFINIGEN_DIRS[@]}"; do
             done
         else
             echo "    Warning: No MaterialsDensity directory found in ${scene_dir}/frames, skipping density files"
+            skipped_seeds+=("$scene_id")
+            SKIPPED_SEEDS=$((SKIPPED_SEEDS+1))
+            rm -rf "${scene_output_dir}"
+            continue
         fi
         
         # Record this seed as successfully included
