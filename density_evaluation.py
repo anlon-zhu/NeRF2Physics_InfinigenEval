@@ -246,6 +246,8 @@ def run_density_evaluation(args):
     # Get density predictions for all points
     print(f"Predicting densities for scene: {args.scene_name}")
     density_results = predict_point_densities(args, scene_dir, clip_model, clip_tokenizer)
+
+    breakpoint()
     
     # Check if we have ground truth density images
     if not os.path.exists(gt_density_dir):
