@@ -43,11 +43,28 @@ for infinigen_dir in "${INFINIGEN_DIRS[@]}"; do
         scene_output_dir="${OUTPUT_BASE}/scenes/${scene_id}"
         mkdir -p "${scene_output_dir}/images"
         mkdir -p "${scene_output_dir}/gt_density"
+        mkdir -p "${scene_output_dir}/camview"
         
         # Check if frames directory exists
         if [ ! -d "${scene_dir}/frames" ]; then
             echo "    Warning: No frames directory found in ${scene_dir}, skipping"
             continue
+        fi
+        
+        # Copy camera parameters for COLMAP
+        if [ -d "${scene_dir}/frames/camview" ]; then
+            echo "    Copying camera parameters for COLMAP conversion"
+            for camera_dir in "${scene_dir}/frames/camview"/*; do
+                if [ -d "$camera_dir" ]; then
+                    camera_id=$(basename "$camera_dir")
+                    mkdir -p "${scene_output_dir}/camview/${camera_id}"
+                    
+                    # Copy all NPZ files (camera parameters)
+                    find "$camera_dir" -name "*.npz" -exec cp {} "${scene_output_dir}/camview/${camera_id}/" \;
+                fi
+            done
+        else
+            echo "    Warning: No camview directory found in ${scene_dir}/frames, skipping camera parameters"
         fi
         
         # Copy RGB images for COLMAP
