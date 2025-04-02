@@ -197,6 +197,13 @@ def organize_for_nerfstudio(input_dir, output_dir, scene_id=None):
     # Create COLMAP cameras.txt
     create_colmap_cameras_file(colmap_dir / "cameras.txt", K, hw)
     
+    # Check if images exist (should already be copied by organize_data.sh)
+    image_files = sorted([f for f in os.listdir(images_dir) if f.endswith('.png') or f.endswith('.exr')])
+    if not image_files:
+        raise FileNotFoundError(f"No image files found in {images_dir}")
+    
+    print(f"Found {len(image_files)} images in {images_dir}")
+    
     # Collect all image data
     image_data = []
     
@@ -208,29 +215,45 @@ def organize_for_nerfstudio(input_dir, output_dir, scene_id=None):
         # Extract view number
         view_id = extract_view_id(cam_file)
         if view_id is None:
+            print(f"Warning: Could not extract view ID from camera file {cam_file}, skipping")
             continue
         
-        # Find corresponding image file
-        # Convert camview_10_0_0048_0.npz to Image_10_0_0048_0.png
-        img_pattern = f"Image_{view_id}_0_0048_0.png"
+        # Look for matching image file in the images directory
+        matching_images = [img for img in image_files if img.startswith(f"{view_id}_") or img.startswith(f"{view_id:03d}_")]
         
-        if not os.path.exists(image_dir / img_pattern):
-            # Also check for exr if png not found
-            img_pattern = img_pattern.replace(".png", ".exr")
-            if not os.path.exists(image_dir / img_pattern):
-                print(f"Warning: No matching image found for camera {cam_file}")
-                continue
+        if not matching_images:
+            # Try alternative patterns that might be in the organized data
+            matching_images = [img for img in image_files if f"_{view_id}_" in img or f"_{view_id:03d}_" in img]
+        
+        if not matching_images:
+            print(f"Warning: No matching image found for camera {cam_file} (view ID: {view_id})")
+            continue
             
-        # Copy image to output directory
-        dest_img_name = f"{view_id:03d}{'.exr' if img_pattern.endswith('.exr') else '.png'}"
-        shutil.copy(
-            image_dir / img_pattern,
-            images_dir / dest_img_name
-        )
+        # Use the first matching image
+        img_file = matching_images[0]
+        
+        # Create standardized destination name for COLMAP
+        dest_img_name = f"{view_id:03d}{'.exr' if img_file.endswith('.exr') else '.png'}"
+        
+        # No need to copy - just create a symlink if the name is different
+        if img_file != dest_img_name:
+            source_path = images_dir / img_file
+            dest_path = images_dir / dest_img_name
+            
+            # Create a symlink with the standard name if it doesn't exist
+            if not dest_path.exists():
+                # On Unix-like systems
+                try:
+                    os.symlink(source_path, dest_path)
+                    print(f"Created symlink: {img_file} -> {dest_img_name}")
+                except Exception as e:
+                    # If symlink fails, copy the file
+                    shutil.copy2(source_path, dest_path)
+                    print(f"Copied file (symlink failed): {img_file} -> {dest_img_name}")
         
         # Add to image data for COLMAP
         image_data.append((dest_img_name, T))
-        print(f"Processed image {img_pattern} -> {dest_img_name}")
+        print(f"Added image {img_file} to COLMAP data")
     
     # Create COLMAP images.txt
     create_colmap_images_file(colmap_dir / "images.txt", image_data)
