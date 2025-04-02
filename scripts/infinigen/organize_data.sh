@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Check arguments
-if [ "$#" -lt 3 ]; then
+if [ "$#" -lt 2 ]; then
     echo "Usage: $0 <output_base_dir> <infinigen_dir1> [<infinigen_dir2> ...]"
     echo "Example: $0 /n/fs/scratch/${USER}/nerf2physics/data /n/fs/scratch/${USER}/2025-03-30_02-32_density_gt_1 /n/fs/scratch/${USER}/2025-03-31_01-32_density_gt_1"
     exit 1
