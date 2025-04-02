@@ -215,8 +215,9 @@ def organize_for_nerfstudio(input_dir, output_dir, scene_id=None):
             print(f"Images directory exists: {scene_dir / 'images'} contains {os.listdir(scene_dir / 'images')}")
         raise
     
-    # Collect all image data
-    image_data = []
+    # First collect all valid images and their transforms
+    view_id_to_image = {}
+    view_id_to_transform = {}
     
     for cam_file in cam_files:
         # Load camera data
@@ -243,28 +244,46 @@ def organize_for_nerfstudio(input_dir, output_dir, scene_id=None):
         # Use the first matching image
         img_file = matching_images[0]
         
-        # Create standardized destination name for COLMAP
-        dest_img_name = f"{view_id:03d}{'.exr' if img_file.endswith('.exr') else '.png'}"
+        # Store the mapping
+        view_id_to_image[view_id] = img_file
+        view_id_to_transform[view_id] = T
+    
+    # Now create sequentially numbered images and build the image_data list
+    image_data = []
+    
+    print(f"Found {len(view_id_to_image)} valid images with camera data")
+    
+    # Sort by view_id for consistent numbering
+    sorted_view_ids = sorted(view_id_to_image.keys())
+    
+    # Initialize image_data list for COLMAP
+    image_data = []
         
-        # No need to copy - just create a symlink if the name is different
-        if img_file != dest_img_name:
-            source_path = images_dir / img_file
-            dest_path = images_dir / dest_img_name
-            
-            # Create a symlink with the standard name if it doesn't exist
-            if not dest_path.exists():
-                # On Unix-like systems
-                try:
-                    os.symlink(source_path, dest_path)
-                    print(f"Created symlink: {img_file} -> {dest_img_name}")
-                except Exception as e:
-                    # If symlink fails, copy the file
-                    shutil.copy2(source_path, dest_path)
-                    print(f"Copied file (symlink failed): {img_file} -> {dest_img_name}")
+    # Now create sequentially numbered images (000.png, 001.png, etc.)
+    for seq_idx, view_id in enumerate(sorted_view_ids):
+        img_file = view_id_to_image[view_id]
+        T = view_id_to_transform[view_id]
         
-        # Add to image data for COLMAP
-        image_data.append((dest_img_name, T))
-        print(f"Added image {img_file} to COLMAP data")
+        # Create sequential file name
+        seq_name = f"{seq_idx:03d}{'.exr' if img_file.endswith('.exr') else '.png'}"
+        source_path = images_dir / img_file
+        dest_path = images_dir / seq_name
+        
+        # Create a copy or symlink with the sequential name
+        if seq_name != img_file and not dest_path.exists():
+            try:
+                # Try symlink first
+                os.symlink(source_path, dest_path)
+                print(f"Created symlink: {img_file} -> {seq_name}")
+            except Exception as e:
+                # If symlink fails, copy the file
+                shutil.copy2(source_path, dest_path)
+                print(f"Copied file (symlink failed): {img_file} -> {seq_name}")
+        
+        # Add to image data for COLMAP - use sequential numbering for file names
+        # but keep original view_id for COLMAP internals
+        image_data.append((seq_name, T))
+        print(f"Added image {seq_name} (from {img_file}) to COLMAP data")
     
     # Create COLMAP images.txt
     create_colmap_images_file(colmap_dir / "images.txt", image_data)
