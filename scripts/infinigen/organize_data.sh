@@ -17,7 +17,14 @@ INFINIGEN_DIRS=("$@")
 mkdir -p ${OUTPUT_BASE}/scenes
 mkdir -p ${OUTPUT_BASE}/logs
 
+# Initialize arrays for metadata tracking
+declare -a included_seeds
+declare -a skipped_seeds
+declare -a source_dirs
+
 echo "[$(date)] Starting organization process"
+TOTAL_SEEDS=0
+SKIPPED_SEEDS=0
 
 # Process each infinigen output directory
 for infinigen_dir in "${INFINIGEN_DIRS[@]}"; do
@@ -36,6 +43,8 @@ for infinigen_dir in "${INFINIGEN_DIRS[@]}"; do
             continue
         fi
         
+        TOTAL_SEEDS=$((TOTAL_SEEDS+1))
+        
         scene_id=$(basename "$scene_dir")
         echo "  Processing scene: $scene_id"
         
@@ -48,6 +57,8 @@ for infinigen_dir in "${INFINIGEN_DIRS[@]}"; do
         # Check if frames directory exists
         if [ ! -d "${scene_dir}/frames" ]; then
             echo "    Warning: No frames directory found in ${scene_dir}, skipping"
+            skipped_seeds+=("$scene_id")
+            SKIPPED_SEEDS=$((SKIPPED_SEEDS+1))
             continue
         fi
         
@@ -112,10 +123,38 @@ for infinigen_dir in "${INFINIGEN_DIRS[@]}"; do
         else
             echo "    Warning: No MaterialsDensity directory found in ${scene_dir}/frames, skipping density files"
         fi
+        
+        # Record this seed as successfully included
+        included_seeds+=("$scene_id")
+        source_dirs+=("$(basename "$infinigen_dir")")
     done
 done
 
+# Create metadata.json file
+cat > "${OUTPUT_BASE}/metadata.json" << EOL
+{
+  "included_seeds": [
+$(for i in "${!included_seeds[@]}"; do
+    echo "    {
+      \"seed\": \"${included_seeds[$i]}\",
+      \"source\": \"${source_dirs[$i]}\"
+    }$([ $i -lt $((${#included_seeds[@]}-1)) ] && echo ",")"
+done)
+  ],
+  "skipped_seeds": [
+$(for i in "${!skipped_seeds[@]}"; do
+    echo "    \"${skipped_seeds[$i]}\"$([ $i -lt $((${#skipped_seeds[@]}-1)) ] && echo ",")"
+done)
+  ],
+  "total_seeds": $TOTAL_SEEDS,
+  "included_count": ${#included_seeds[@]},
+  "skipped_count": $SKIPPED_SEEDS,
+  "creation_time": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+}
+EOL
+
 echo "[$(date)] Organization process complete"
+echo "Created metadata.json with information about $(( TOTAL_SEEDS - SKIPPED_SEEDS )) included and $SKIPPED_SEEDS skipped seeds."
 echo
 echo "You can now run convert_infinigen_to_colmap.sh as follows:"
 echo "sbatch scripts/infinigen/convert_infinigen_to_colmap.sh ${OUTPUT_BASE} ${OUTPUT_BASE}/colmap_scenes <scene_id>"
