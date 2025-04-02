@@ -58,17 +58,72 @@ if [ ! -f "$METADATA_FILE" ]; then
 EOL
 fi
 
-# Function to check if scene has been reconstructed
+# Function to check if scene has been reconstructed. Checks both metadata and directory
 is_scene_reconstructed() {
     local scene=$1
+    
+    # First check if it's marked in metadata
     if command -v jq &> /dev/null; then
         jq -e ".reconstructed_seeds | index(\"$scene\")" "$METADATA_FILE" > /dev/null
-        return $?
+        local metadata_result=$?
+        if [ $metadata_result -eq 0 ]; then
+            echo "Scene $scene found in metadata as reconstructed"
+            return 0  # Already marked as reconstructed
+        fi
     else
         grep -q "\"$scene\"" "$METADATA_FILE"
-        return $?
+        local metadata_result=$?
+        if [ $metadata_result -eq 0 ]; then
+            echo "Scene $scene found in metadata as reconstructed"
+            return 0  # Already marked as reconstructed
+        fi
     fi
+    
+    # Correct path: scenes directory is under DATA_DIR and each scene has an 'ns' subdir
+    local scenes_dir="${DATA_DIR}/scenes"
+    local ns_dir="${scenes_dir}/${scene}/ns"
+    
+    # If not in metadata, check if "ns" directory exists and has necessary files
+    if [ -d "$ns_dir" ]; then
+        # Check for typical files that indicate a complete reconstruction
+        if [ -d "${ns_dir}/pointcloud" ] || [ -d "${ns_dir}/renders" ] || [ -f "${ns_dir}/dataparser_transforms.json" ]; then
+            echo "Scene $scene has ns directory with expected content - marking as reconstructed"
+            
+            # Directory exists with reconstruction artifacts, mark it in metadata
+            local temp_file="${METADATA_FILE}.tmp"
+            
+            if command -v jq &> /dev/null; then
+                # Use jq to update metadata file (more reliable)
+                jq --arg scene "$scene" \
+                   '.reconstructed_seeds += [$scene] | .reconstructed_count = (.reconstructed_seeds | length)' \
+                   "$METADATA_FILE" > "$temp_file"
+                mv "$temp_file" "$METADATA_FILE"
+            else
+                # Without jq, use a more portable sed approach
+                # Create temp file first to avoid in-place editing issues
+                if grep -q "\"reconstructed_seeds\"" "$METADATA_FILE"; then
+                    # Add to existing array
+                    sed "s/\"reconstructed_seeds\":\s*\[/\"reconstructed_seeds\": [\"$scene\", /" "$METADATA_FILE" > "$temp_file"
+                    
+                    # Update count
+                    count=$(grep -o '"reconstructed_seeds"\s*:\s*\[\("[^"]*"\(,\s*\)*\)*\]' "$temp_file" | grep -o '"' | wc -l | awk '{print $1/2}')
+                    sed "s/\"reconstructed_count\":\s*[0-9]*/\"reconstructed_count\": $count/" "$temp_file" > "${temp_file}.2"
+                    mv "${temp_file}.2" "$temp_file"
+                else
+                    # Create a new array
+                    sed "s/}$/,\"reconstructed_seeds\":[\"$scene\"],\"reconstructed_count\":1}/" "$METADATA_FILE" > "$temp_file"
+                fi
+                mv "$temp_file" "$METADATA_FILE"
+            fi
+            return 0  # Scene has "ns" directory with content, now marked as reconstructed
+        else
+            echo "Scene $scene has ns directory but no reconstruction artifacts found"
+        fi
+    fi
+    
+    return 1  # Scene is not reconstructed
 }
+
 
 # Function to update metadata with reconstructed scene
 update_metadata_with_reconstructed() {
