@@ -140,12 +140,13 @@ def organize_for_nerfstudio(input_dir, output_dir, scene_id=None):
     
     This function assumes data is already organized by organize_data.sh script with structure:
     /path/to/data/scenes/scene_id/
-      images/
+      infinigen_images/      # Original Infinigen images
         camera_0/
           *.png
       camview/
         camera_0/
           *.npz
+      images/               # New directory for COLMAP-formatted images
     """
     input_dir = Path(input_dir)
     print(f"Input directory: {input_dir}")
@@ -157,11 +158,11 @@ def organize_for_nerfstudio(input_dir, output_dir, scene_id=None):
         print(f"Using input directory name as scene_id: {scene_id}")
     
     # Check if input_dir is already the scene directory
-    # Look for camview and images directories
-    if (input_dir / "camview").exists() and (input_dir / "images").exists():
+    # Look for camview and infinigen_images directories
+    if (input_dir / "camview").exists() and (input_dir / "infinigen_images").exists():
         # This is already the scene directory
         scene_dir = input_dir
-        print(f"Input directory is already a scene directory containing camview/ and images/")
+        print(f"Input directory is already a scene directory containing camview/ and infinigen_images/")
     else:
         print(f"Input directory is not a scene directory, looking for scene {scene_id}")
         # Otherwise, it might be a parent directory
@@ -182,11 +183,15 @@ def organize_for_nerfstudio(input_dir, output_dir, scene_id=None):
     os.makedirs(colmap_dir, exist_ok=True)
     
     # Expected directories based on organize_data.sh structure
-    images_dir = scene_dir / "images" / "camera_0"
+    infinigen_images_dir = scene_dir / "infinigen_images" / "camera_0"
     camview_dir = scene_dir / "camview" / "camera_0"
     
-    if not camview_dir.exists() or not images_dir.exists():
-        raise FileNotFoundError(f"Missing required directories: \nImages: {images_dir} (exists: {images_dir.exists()})\nCamera: {camview_dir} (exists: {camview_dir.exists()})")
+    # Create clean images directory for COLMAP sequential images
+    images_dir = scene_dir / "images"
+    os.makedirs(images_dir, exist_ok=True)
+    
+    if not camview_dir.exists() or not infinigen_images_dir.exists():
+        raise FileNotFoundError(f"Missing required directories: \nInfinigen Images: {infinigen_images_dir} (exists: {infinigen_images_dir.exists()})\nCamera: {camview_dir} (exists: {camview_dir.exists()})")
     
     # Get a list of all camera files
     cam_files = sorted([f for f in os.listdir(camview_dir) if f.endswith(".npz")])
@@ -201,18 +206,18 @@ def organize_for_nerfstudio(input_dir, output_dir, scene_id=None):
     # Create COLMAP cameras.txt
     create_colmap_cameras_file(colmap_dir / "cameras.txt", K, hw)
     
-    # Check if images exist (should already be copied by organize_data.sh)
+    # Check if infinigen images exist (should already be copied by organize_data.sh)
     try:
-        image_files = sorted([f for f in os.listdir(images_dir) if f.endswith('.png') or f.endswith('.exr')])
+        image_files = sorted([f for f in os.listdir(infinigen_images_dir) if f.endswith('.png') or f.endswith('.exr')])
         if not image_files:
-            raise FileNotFoundError(f"No image files found in {images_dir}")
+            raise FileNotFoundError(f"No image files found in {infinigen_images_dir}")
         
-        print(f"Found {len(image_files)} images in {images_dir}")
+        print(f"Found {len(image_files)} images in {infinigen_images_dir}")
     except Exception as e:
-        print(f"Error accessing image directory: {e}")
+        print(f"Error accessing infinigen image directory: {e}")
         print(f"Directory structure: {scene_dir} contains {os.listdir(scene_dir)}")
-        if (scene_dir / "images").exists():
-            print(f"Images directory exists: {scene_dir / 'images'} contains {os.listdir(scene_dir / 'images')}")
+        if (scene_dir / "infinigen_images").exists():
+            print(f"Infinigen images directory exists: {scene_dir / 'infinigen_images'} contains {os.listdir(scene_dir / 'infinigen_images')}")
         raise
     
     # First collect all valid images and their transforms
@@ -230,7 +235,7 @@ def organize_for_nerfstudio(input_dir, output_dir, scene_id=None):
             print(f"Warning: Could not extract view ID from camera file {cam_file}, skipping")
             continue
         
-        # Look for matching image file in the images directory
+        # Look for matching image file in the infinigen_images directory
         matching_images = [img for img in image_files if img.startswith(f"{view_id}_") or img.startswith(f"{view_id:03d}_")]
         
         if not matching_images:
@@ -266,7 +271,7 @@ def organize_for_nerfstudio(input_dir, output_dir, scene_id=None):
         
         # Create sequential file name
         seq_name = f"{seq_idx:03d}{'.exr' if img_file.endswith('.exr') else '.png'}"
-        source_path = images_dir / img_file
+        source_path = infinigen_images_dir / img_file
         dest_path = images_dir / seq_name
         
         # Create a copy or symlink with the sequential name

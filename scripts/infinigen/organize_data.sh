@@ -104,7 +104,7 @@ for infinigen_dir in "${INFINIGEN_DIRS[@]}"; do
         
         # Create output directories for this scene
         scene_output_dir="${OUTPUT_BASE}/scenes/${scene_id}"
-        mkdir -p "${scene_output_dir}/images"
+        mkdir -p "${scene_output_dir}/infinigen_images"
         mkdir -p "${scene_output_dir}/gt_density"
         mkdir -p "${scene_output_dir}/camview"
         
@@ -138,10 +138,10 @@ for infinigen_dir in "${INFINIGEN_DIRS[@]}"; do
             for camera_dir in "${scene_dir}/frames/Image"/*; do
                 if [ -d "$camera_dir" ]; then
                     camera_id=$(basename "$camera_dir")
-                    mkdir -p "${scene_output_dir}/images/${camera_id}"
+                    mkdir -p "${scene_output_dir}/infinigen_images/${camera_id}"
                     
                     # Copy all PNG images
-                    find "$camera_dir" -name "*.png" -exec cp {} "${scene_output_dir}/images/${camera_id}/" \;
+                    find "$camera_dir" -name "*.png" -exec cp {} "${scene_output_dir}/infinigen_images/${camera_id}/" \;
                 fi
             done
         else
