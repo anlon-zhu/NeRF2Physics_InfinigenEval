@@ -41,8 +41,8 @@ METADATA_FILE="${OUTPUT_BASE}/metadata.json"
 if [ -f "$METADATA_FILE" ]; then
     echo "Found existing metadata.json, will update it with new seeds"
     
-    # Extract existing seeds into an associative array for quick lookup
-    declare -A existing_seeds
+    # Extract existing seeds into arrays for later lookup
+    # Avoid associative arrays since our scene IDs start with digits
     
     # Use jq if available, otherwise fallback to grep + sed
     if command -v jq &> /dev/null; then
@@ -53,7 +53,7 @@ if [ -f "$METADATA_FILE" ]; then
         for i in "${!existing_seed_list[@]}"; do
             seed_id="${existing_seed_list[$i]}"
             source_id="${existing_source_list[$i]}"
-            existing_seeds["$seed_id"]="$source_id"
+            # Don't use associative array, just add to the normal arrays
             included_seeds+=("$seed_id")
             source_dirs+=("$source_id")
         done
@@ -105,8 +105,17 @@ for infinigen_dir in "${INFINIGEN_DIRS[@]}"; do
         scene_id=$(basename "$scene_dir")
         
         # Skip this scene if it already exists in metadata
-        if [ -v existing_seeds["$scene_id"] ]; then
-            echo "  Scene $scene_id already processed, skipping"
+        # Use a loop to check if the scene_id is in the array to avoid base interpretation issues
+        skip_scene=false
+        for existing_seed in "${included_seeds[@]}"; do
+            if [[ "$existing_seed" == "$scene_id" ]]; then
+                echo "  Scene $scene_id already processed, skipping"
+                skip_scene=true
+                break
+            fi
+        done
+        
+        if [[ "$skip_scene" == true ]]; then
             continue
         fi
         
