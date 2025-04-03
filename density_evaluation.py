@@ -131,49 +131,24 @@ def render_density_from_camera_view(points, density_values, w2c, K, hw=(1024, 10
 
 def load_ground_truth_density(gt_image_path):
     """
-    Load a ground truth density image and extract its colormap range.
-    Returns the density values and the min/max values used for colorization.
+    Load a ground truth density file.
+    Only supports NPY files containing actual density values.
+    Returns the density values and the min/max values used for range determination.
     """
-    if gt_image_path.endswith('.npy'):
-        # Load raw numpy array with actual density values
-        density_data = np.load(gt_image_path)
-        # Filter out -1 values (if any) for min/max calculation
-        valid_data = density_data[density_data != -1]
-        if len(valid_data) > 0:
-            vmin, vmax = np.min(valid_data), np.max(valid_data)
-        else:
-            vmin, vmax = 0, 1  # Default fallback
-        return density_data, vmin, vmax
+    if not gt_image_path.endswith('.npy'):
+        raise ValueError(f"Unsupported ground truth file format: {gt_image_path}. Only .npy files are supported.")
+        
+    # Load raw numpy array with actual density values
+    density_data = np.load(gt_image_path)
+    
+    # Filter out -1 values (if any) for min/max calculation
+    valid_data = density_data[density_data != -1]
+    if len(valid_data) > 0:
+        vmin, vmax = np.min(valid_data), np.max(valid_data)
     else:
-        # For image files, we need to estimate the original density range
-        # First load as grayscale
-        img = Image.open(gt_image_path).convert('L')
-        density_data = np.array(img)
-        
-        # Check if we have a corresponding .json file with metadata
-        json_path = gt_image_path.replace('.png', '.json').replace('.jpg', '.json')
-        if os.path.exists(json_path):
-            try:
-                with open(json_path, 'r') as f:
-                    metadata = json.load(f)
-                    if 'density_min' in metadata and 'density_max' in metadata:
-                        vmin = metadata['density_min']
-                        vmax = metadata['density_max']
-                        return density_data, vmin, vmax
-            except:
-                pass  # Continue with default approach if JSON parsing fails
-        
-        # If no metadata found, estimate from the non-zero values in the image
-        # This assumes the image was created using a similar colormap approach
-        valid_data = density_data[density_data > 0]  # Ignore black background
-        if len(valid_data) > 0:
-            # Scale back to estimated original range
-            # This is an estimation - if exact values are needed, they should be stored in metadata
-            vmin, vmax = 0, 5000  # Default density range estimate for normalization
-        else:
-            vmin, vmax = 0, 1  # Default fallback
-            
-        return density_data, vmin, vmax
+        vmin, vmax = 0, 1  # Default fallback
+    
+    return density_data, vmin, vmax
 
 
 def evaluate_density_against_gt(rendered_density, rendered_rgb, gt_density, gt_vmin, gt_vmax, is_gt_npy=False):
@@ -210,12 +185,8 @@ def evaluate_density_against_gt(rendered_density, rendered_rgb, gt_density, gt_v
     try:
         # Make sure we have compatible shapes for comparison
         if len(rendered_normalized.shape) != len(gt_normalized.shape):
-            if len(rendered_normalized.shape) == 3 and len(gt_normalized.shape) == 2:
-                # Use mean across channels to get grayscale
-                rendered_normalized = np.mean(rendered_normalized, axis=2)
-            elif len(rendered_normalized.shape) == 2 and len(gt_normalized.shape) == 3:
-                gt_normalized = np.mean(gt_normalized, axis=2)
-                
+            raise ValueError(f"Cannot compare shapes: {rendered_normalized.shape} vs {gt_normalized.shape}")
+        
         # Final shape check
         if rendered_normalized.shape != gt_normalized.shape:
             raise ValueError(f"Cannot compare shapes: {rendered_normalized.shape} vs {gt_normalized.shape}")
@@ -227,25 +198,45 @@ def evaluate_density_against_gt(rendered_density, rendered_rgb, gt_density, gt_v
         # Print shapes after flattening for debugging
         print(f"Flattened pixel values shape: {pixel_values.shape}, GT values shape: {gt_values.shape}")
         
-        # Filter out black background pixels
-        valid_mask = gt_values > 0.01  # Threshold to avoid background
+        # Filter out invalid pixels:
+        # 1. Exclude -1 values in ground truth (indicates missing data)
+        # 2. Exclude very low values (close to zero) to avoid divide by zero errors
+        # 3. Ensure both predictions and ground truth are positive for meaningful comparison
+        valid_mask = (gt_values > 0.1) & (gt_values != -1) & (pixel_values > 0.1)
         valid_pred = pixel_values[valid_mask]
         valid_gt = gt_values[valid_mask]
+        
+        # Report how many valid pixels we're using
+        print(f"Valid pixels for evaluation: {len(valid_pred)} out of {len(pixel_values)} total pixels ({len(valid_pred)/len(pixel_values)*100:.2f}%)")
         
         if len(valid_pred) == 0:
             print("WARNING: No valid pixels found for comparison")
             return {'ADE': 0, 'ALDE': 0, 'APE': 0, 'MnRE': 0}
         
-        # Format for metrics
-        valid_pred_ranges = np.stack([valid_pred * 0.8, valid_pred * 1.2], axis=1)  # Create min-max ranges
+        # Exit early if we don't have enough valid pixels
+        if len(valid_pred) < 10:
+            print("WARNING: Not enough valid pixels for meaningful evaluation")
+            return {'ADE': 0, 'ALDE': 0, 'APE': 0, 'MnRE': 0}
+        
+        # Add a small epsilon to avoid divide by zero
+        epsilon = 1e-8
+        safe_pred = np.maximum(valid_pred, epsilon)
+        safe_gt = np.maximum(valid_gt, epsilon)
             
-        # Calculate metrics
-        metrics = {
-            'ADE': ADE(valid_pred_ranges, valid_gt),
-            'ALDE': ALDE(valid_pred_ranges, valid_gt),
-            'APE': APE(valid_pred_ranges, valid_gt),
-            'MnRE': MnRE(valid_pred_ranges, valid_gt)
-        }
+        # Format for metrics
+        valid_pred_ranges = np.stack([safe_pred * 0.8, safe_pred * 1.2], axis=1)  # Create min-max ranges
+            
+        # Calculate metrics with additional error handling
+        try:
+            metrics = {
+                'ADE': ADE(valid_pred_ranges, safe_gt),
+                'ALDE': ALDE(valid_pred_ranges, safe_gt),
+                'APE': APE(valid_pred_ranges, safe_gt),
+                'MnRE': MnRE(valid_pred_ranges, safe_gt)
+            }
+        except Exception as e:
+            print(f"WARNING: Error computing metrics: {e}")
+            return {'ADE': 0, 'ALDE': 0, 'APE': 0, 'MnRE': 0}
     except Exception as e:
         print(f"ERROR computing metrics: {e}")
         metrics = {'ADE': 0, 'ALDE': 0, 'APE': 0, 'MnRE': 0}
@@ -274,8 +265,6 @@ def run_density_evaluation(args):
     # Get density predictions for all points
     print(f"Predicting densities for scene: {args.scene_name}")
     density_results = predict_point_densities(args, scene_dir, clip_model, clip_tokenizer)
-
-    breakpoint()
     
     # Check if we have ground truth density images
     if not os.path.exists(gt_density_dir):
