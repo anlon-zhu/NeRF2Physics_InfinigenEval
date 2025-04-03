@@ -12,6 +12,29 @@ from predict_property import predict_physical_property_query
 from utils import load_ns_point_cloud, parse_transforms_json, load_images, parse_dataparser_transforms_json
 from arguments import get_args
 from evaluation import ADE, ALDE, APE, MnRE, show_metrics
+
+
+def find_gt_file(gt_dir, view_idx):
+    """Helper function to find ground truth density file for a specific view."""
+    # First try NPY (single-point density values) with different naming patterns
+    gt_file = os.path.join(gt_dir, f'density_{view_idx:03d}.npy')
+    if os.path.exists(gt_file):
+        return gt_file
+        
+    gt_file = os.path.join(gt_dir, f'density_{view_idx}.npy')
+    if os.path.exists(gt_file):
+        return gt_file
+        
+    # If NPY not found, fall back to PNG (3-channel visualization)
+    gt_file = os.path.join(gt_dir, f'density_{view_idx:03d}.png')
+    if os.path.exists(gt_file):
+        return gt_file
+        
+    gt_file = os.path.join(gt_dir, f'density_{view_idx}.png')
+    if os.path.exists(gt_file):
+        return gt_file
+        
+    return None
 from visualization import render_pcd_headless, values_to_colors
 
 
@@ -156,71 +179,76 @@ def load_ground_truth_density(gt_image_path):
 def evaluate_density_against_gt(rendered_density, rendered_rgb, gt_density, gt_vmin, gt_vmax, is_gt_npy=False):
     """
     Compare rendered density image with ground truth density image.
-    Always use single-valued density for evaluation, while RGB is used only for visualization.
+    Only performs comparison when ground truth density (NPY/NPZ) is available.
     """
     # Print shapes for debugging
     print(f"Rendered density shape: {rendered_density.shape}, Rendered RGB shape: {rendered_rgb.shape}, GT density shape: {gt_density.shape}")
     
-    # Always use single-channel rendered density values for evaluation
-    rendered_version = rendered_density
+    # Only evaluate if ground truth is single-channel density values (NPY/NPZ)
+    if not is_gt_npy:
+        print("WARNING: Skipping evaluation - only single-channel density values (NPY/NPZ) are used for evaluation")
+        return {'ADE': 0, 'ALDE': 0, 'APE': 0, 'MnRE': 0}
+        
     print("Using single-channel density values for evaluation")
+    rendered_version = rendered_density
+    gt_version = gt_density
     
-    # If ground truth is RGB, convert to grayscale for comparison
-    if len(gt_density.shape) == 3 and gt_density.shape[2] == 3:
-        print("Converting RGB ground truth to grayscale for evaluation")
-        gt_density = np.mean(gt_density, axis=2)
+    # Check for dimension compatibility
+    if len(rendered_version.shape) != len(gt_version.shape):
+        print(f"WARNING: Format mismatch - Rendered has {len(rendered_version.shape)} dimensions but GT has {len(gt_version.shape)} dimensions")
+        print(f"Skipping evaluation due to incompatible formats")
+        return {'ADE': 0, 'ALDE': 0, 'APE': 0, 'MnRE': 0}
     
-    # Resize ground truth if needed
-    if rendered_version.shape[:2] != gt_density.shape[:2]:
-        print(f"Resizing ground truth from {gt_density.shape[:2]} to {rendered_version.shape[:2]}")
-        gt_density_resized = np.array(Image.fromarray(gt_density).resize(
-            (rendered_version.shape[1], rendered_version.shape[0]), Image.BILINEAR))
-    else:
-        gt_density_resized = gt_density
+    # Use raw density values directly - no normalization
+    # as they represent physical quantities with meaning
+    rendered_normalized = rendered_version
+    gt_normalized = gt_version
+    print("Using raw density values for evaluation")
+    print(f"Density value ranges - Rendered: [{rendered_normalized.min():.4f}, {rendered_normalized.max():.4f}], GT: [{gt_normalized.min():.4f}, {gt_normalized.max():.4f}]")
     
-    # Scale rendered density to match ground truth range
-    rendered_version_scaled = np.copy(rendered_version)
-    if rendered_version.max() > 0:  # Avoid division by zero
-        # Scale rendered version to the same range as ground truth
-        rendered_min = rendered_version.min()
-        rendered_max = rendered_version.max()
-        # Linear mapping from [rendered_min, rendered_max] to [gt_vmin, gt_vmax]
-        rendered_version_scaled = ((rendered_version - rendered_min) / (rendered_max - rendered_min)) * (gt_vmax - gt_vmin) + gt_vmin
-    
-    # Normalize both to [0, 1] for comparison
-    if gt_density_resized.max() > gt_density_resized.min():
-        gt_normalized = (gt_density_resized - gt_density_resized.min()) / (gt_density_resized.max() - gt_density_resized.min())
-    else:
-        gt_normalized = np.zeros_like(gt_density_resized)
+    # For metrics calculation, we need to make sure dimensions match and we're comparing the same type of data
+    try:
+        # Make sure we have compatible shapes for comparison
+        if len(rendered_normalized.shape) != len(gt_normalized.shape):
+            if len(rendered_normalized.shape) == 3 and len(gt_normalized.shape) == 2:
+                # Use mean across channels to get grayscale
+                rendered_normalized = np.mean(rendered_normalized, axis=2)
+            elif len(rendered_normalized.shape) == 2 and len(gt_normalized.shape) == 3:
+                gt_normalized = np.mean(gt_normalized, axis=2)
+                
+        # Final shape check
+        if rendered_normalized.shape != gt_normalized.shape:
+            raise ValueError(f"Cannot compare shapes: {rendered_normalized.shape} vs {gt_normalized.shape}")
         
-    if rendered_version_scaled.max() > rendered_version_scaled.min():
-        rendered_normalized = (rendered_version_scaled - rendered_version_scaled.min()) / (rendered_version_scaled.max() - rendered_version_scaled.min())
-    else:
-        rendered_normalized = np.zeros_like(rendered_version_scaled)
-    
-    # Convert to prediction format for metrics
-    # Always use single-channel processing
-    pixel_values = rendered_normalized.flatten()
-    gt_values = gt_normalized.flatten()
-    
-    # Print shapes after flattening for debugging
-    print(f"Flattened pixel values shape: {pixel_values.shape}, GT values shape: {gt_values.shape}")
-    
-    # Filter out black background pixels
-    valid_mask = gt_values > 0.01  # Threshold to avoid background
-    valid_pred = pixel_values[valid_mask]
-    valid_gt = gt_values[valid_mask]
-    
-    # Format for metrics
-    valid_pred_ranges = np.stack([valid_pred * 0.8, valid_pred * 1.2], axis=1)  # Create min-max ranges
+        # Flatten for metric calculation
+        pixel_values = rendered_normalized.flatten()
+        gt_values = gt_normalized.flatten()
         
-    # Calculate metrics
-    metrics = {
-        'ADE': ADE(valid_pred_ranges, valid_gt),
-        'ALDE': ALDE(valid_pred_ranges, valid_gt),
-        'APE': APE(valid_pred_ranges, valid_gt),
-        'MnRE': MnRE(valid_pred_ranges, valid_gt)
-    }
+        # Print shapes after flattening for debugging
+        print(f"Flattened pixel values shape: {pixel_values.shape}, GT values shape: {gt_values.shape}")
+        
+        # Filter out black background pixels
+        valid_mask = gt_values > 0.01  # Threshold to avoid background
+        valid_pred = pixel_values[valid_mask]
+        valid_gt = gt_values[valid_mask]
+        
+        if len(valid_pred) == 0:
+            print("WARNING: No valid pixels found for comparison")
+            return {'ADE': 0, 'ALDE': 0, 'APE': 0, 'MnRE': 0}
+        
+        # Format for metrics
+        valid_pred_ranges = np.stack([valid_pred * 0.8, valid_pred * 1.2], axis=1)  # Create min-max ranges
+            
+        # Calculate metrics
+        metrics = {
+            'ADE': ADE(valid_pred_ranges, valid_gt),
+            'ALDE': ALDE(valid_pred_ranges, valid_gt),
+            'APE': APE(valid_pred_ranges, valid_gt),
+            'MnRE': MnRE(valid_pred_ranges, valid_gt)
+        }
+    except Exception as e:
+        print(f"ERROR computing metrics: {e}")
+        metrics = {'ADE': 0, 'ALDE': 0, 'APE': 0, 'MnRE': 0}
     
     return metrics
 
@@ -294,11 +322,20 @@ def run_density_evaluation(args):
         w2c_o3d = w2c.copy()
         w2c_o3d[[1, 2]] *= -1
         
+        hw = (1024, 1024)
+        if perform_evaluation:
+            gt_file = find_gt_file(gt_density_dir, view_idx)
+            if gt_file and os.path.exists(gt_file):
+                gt_data, _, _ = load_ground_truth_density(gt_file)
+                hw = gt_data.shape[:2]  # Get height, width as tuple
+                print(f"Using ground truth dimensions for rendering: {hw}")
+        
         # Render density from this view - now returns both RGB visualization and raw density values
         rendered_rgb, rendered_density = render_density_from_camera_view(
             density_results['points'],
             density_results['density_values'],
             w2c_o3d, K,
+            hw=hw,
             cmap_min=cmap_min,
             cmap_max=cmap_max
         )
@@ -319,29 +356,22 @@ def run_density_evaluation(args):
         plt.savefig(os.path.join(output_dir, f'predicted_density_values_view_{view_idx}.png'))
         plt.close()
         
-        # Also save the raw numpy array for later use
+        # Save both NPY (for evaluation) and NPZ (for full metadata)
         np.save(os.path.join(output_dir, f'predicted_density_values_view_{view_idx}.npy'), rendered_density)
+        np.savez(os.path.join(output_dir, f'predicted_density_values_view_{view_idx}.npz'),
+                 density=rendered_density,
+                 rgb=rendered_rgb,
+                 min_value=cmap_min,
+                 max_value=cmap_max)
         
         # Compare with ground truth if available
         if perform_evaluation:
-            # First try NPY (single-point density values) with different naming patterns
-            gt_file = os.path.join(gt_density_dir, f'density_{view_idx:03d}.npy')
-            if not os.path.exists(gt_file):
-                gt_file = os.path.join(gt_density_dir, f'density_{view_idx}.npy')
-            
-            # If NPY not found, fall back to PNG (3-channel visualization)
-            if not os.path.exists(gt_file):
-                gt_file = os.path.join(gt_density_dir, f'density_{view_idx:03d}.png')
-            if not os.path.exists(gt_file):
-                gt_file = os.path.join(gt_density_dir, f'density_{view_idx}.png')
+            # Get ground truth file
+            gt_file = find_gt_file(gt_density_dir, view_idx)
             
             if os.path.exists(gt_file):
                 gt_data, gt_vmin, gt_vmax = load_ground_truth_density(gt_file)
-                
-                # Determine if ground truth is NPY format
                 is_gt_npy = gt_file.endswith('.npy')
-                
-                # Evaluate using the appropriate rendered version based on ground truth format
                 metrics = evaluate_density_against_gt(
                     rendered_density, 
                     rendered_rgb, 
