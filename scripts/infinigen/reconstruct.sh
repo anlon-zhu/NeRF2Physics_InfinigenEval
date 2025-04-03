@@ -25,8 +25,8 @@ export TORCH_HOME=/n/fs/scratch/${USER}/nerf2physics/torch_cache
 
 DATA_DIR=$1
 TRAINING_ITERS=${2:-10000}  # Default to 10000 if not provided
-NEAR_PLANE=${3:-0.4}        # Default to 0.4 if not provided
-FAR_PLANE=${4:-6.0}         # Default to 6.0 if not provided
+NEAR_PLANE=${3:-0.01}        # Default to 0.01 if not provided
+FAR_PLANE=${4:-10.0}         # Default to 10.0 if not provided
 SCENE_NAME=$5
 
 # Activate conda environment

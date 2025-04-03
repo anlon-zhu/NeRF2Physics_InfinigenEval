@@ -12,6 +12,7 @@ def parse_args():
     parser.add_argument("--input_dir", type=str, required=True, help="Input directory containing Infinigen renders")
     parser.add_argument("--output_dir", type=str, required=True, help="Output directory for COLMAP data")
     parser.add_argument("--scene_id", type=str, default=None, help="Scene ID to process (default: use directory name)")
+    parser.add_argument("--use_depth", action="store_true", help="Enable depth supervision using depth images")
     return parser.parse_args()
 
 def extract_view_id(filename):
@@ -99,8 +100,16 @@ def create_empty_points3d_file(output_path):
     
     print(f"Created empty points3D.txt at {output_path}")
 
-def create_transforms_json(output_path, image_data, K, hw):
-    """Create transforms.json file required by Nerfstudio"""
+def create_transforms_json(output_path, image_data, K, hw, depth_files=None):
+    """Create transforms.json file required by Nerfstudio
+    
+    Args:
+        output_path: Path to write transforms.json file
+        image_data: List of tuples (image_name, T) with transform matrices
+        K: Camera intrinsics matrix
+        hw: Tuple of (height, width)
+        depth_files: Optional dictionary mapping image names to corresponding depth file paths
+    """
     height, width = hw
     fx, fy = K[0, 0], K[1, 1]
     cx, cy = K[0, 2], K[1, 2]
@@ -117,6 +126,11 @@ def create_transforms_json(output_path, image_data, K, hw):
             "transform_matrix": c2w.tolist(),
             "colmap_im_id": idx + 1  # 1-based IDs for COLMAP
         }
+        
+        # Add depth file path if available
+        if depth_files and image_name in depth_files:
+            frame["depth_file_path"] = depth_files[image_name]
+        
         frames.append(frame)
     
     transforms_json = {
@@ -135,7 +149,7 @@ def create_transforms_json(output_path, image_data, K, hw):
     
     print(f"Created transforms.json at {output_path}")
 
-def organize_for_nerfstudio(input_dir, output_dir, scene_id=None):
+def organize_for_nerfstudio(input_dir, output_dir, scene_id=None, use_depth=False):
     """Convert Infinigen data to COLMAP format for NeRF Studio
     
     This function assumes data is already organized by organize_data.sh script with structure:
@@ -185,10 +199,18 @@ def organize_for_nerfstudio(input_dir, output_dir, scene_id=None):
     # Expected directories based on organize_data.sh structure
     infinigen_images_dir = scene_dir / "infinigen_images" / "camera_0"
     camview_dir = scene_dir / "camview" / "camera_0"
+    depth_images_dir = scene_dir / "depth_images" / "camera_0" if use_depth else None
     
     # Create clean images directory for COLMAP sequential images
     images_dir = scene_dir / "images"
     os.makedirs(images_dir, exist_ok=True)
+    
+    # Create depth directory if using depth supervision
+    depth_dir = None
+    if use_depth and depth_images_dir and depth_images_dir.exists():
+        depth_dir = scene_dir / "depth"
+        os.makedirs(depth_dir, exist_ok=True)
+        print(f"Using depth supervision, depth images directory: {depth_images_dir}")
     
     if not camview_dir.exists() or not infinigen_images_dir.exists():
         raise FileNotFoundError(f"Missing required directories: \nInfinigen Images: {infinigen_images_dir} (exists: {infinigen_images_dir.exists()})\nCamera: {camview_dir} (exists: {camview_dir.exists()})")
@@ -261,8 +283,9 @@ def organize_for_nerfstudio(input_dir, output_dir, scene_id=None):
     # Sort by view_id for consistent numbering
     sorted_view_ids = sorted(view_id_to_image.keys())
     
-    # Initialize image_data list for COLMAP
+    # Initialize image_data list for COLMAP and depth file mapping
     image_data = []
+    depth_files = {} if use_depth else None
         
     # Now create sequentially numbered images (000.png, 001.png, etc.)
     for seq_idx, view_id in enumerate(sorted_view_ids):
@@ -285,6 +308,35 @@ def organize_for_nerfstudio(input_dir, output_dir, scene_id=None):
                 shutil.copy2(source_path, dest_path)
                 print(f"Copied file (symlink failed): {img_file} -> {seq_name}")
         
+        # Process depth image if using depth supervision
+        if use_depth and depth_dir and depth_images_dir and depth_images_dir.exists():
+            # Try to find matching depth image
+            depth_files_list = os.listdir(depth_images_dir) if depth_images_dir.exists() else []
+            
+            # Look for depth image with the same view_id pattern
+            matching_depth = [d for d in depth_files_list if f"Depth_{view_id}_" in d or f"Depth_{view_id:02d}_" in d]
+            
+            if matching_depth:
+                depth_img_file = matching_depth[0]
+                depth_seq_name = f"{seq_idx:03d}.png"  # Always use PNG for depth
+                depth_source_path = depth_images_dir / depth_img_file
+                depth_dest_path = depth_dir / depth_seq_name
+                
+                # Create a copy or symlink for the depth image
+                if not depth_dest_path.exists():
+                    try:
+                        os.symlink(depth_source_path, depth_dest_path)
+                        print(f"Created depth symlink: {depth_img_file} -> {depth_seq_name}")
+                    except Exception as e:
+                        shutil.copy2(depth_source_path, depth_dest_path)
+                        print(f"Copied depth file (symlink failed): {depth_img_file} -> {depth_seq_name}")
+                
+                # Add depth file path to the mapping
+                depth_files[seq_name] = f"./depth/{depth_seq_name}"
+                print(f"Added depth image {depth_seq_name} (from {depth_img_file}) for view {view_id}")
+            else:
+                print(f"Warning: No matching depth file found for view ID {view_id}")
+        
         # Add to image data for COLMAP - use sequential numbering for file names
         # but keep original view_id for COLMAP internals
         image_data.append((seq_name, T))
@@ -297,13 +349,18 @@ def organize_for_nerfstudio(input_dir, output_dir, scene_id=None):
     create_empty_points3d_file(colmap_dir / "points3D.txt")
     
     # Create transforms.json file required by Nerfstudio
-    create_transforms_json(scene_dir / "transforms.json", image_data, K, hw)
+    create_transforms_json(scene_dir / "transforms.json", image_data, K, hw, depth_files)
     
     print(f"\nSuccessfully organized data for NeRF Studio at {scene_dir}")
     print(f"Created transforms.json file for Nerfstudio")
+    
+    if use_depth and depth_dir:
+        print(f"Included depth supervision with {len(depth_files) if depth_files else 0} depth images")
+        print(f"You should run ns_reconstruction.py with a depth-enabled method like 'depth-nerfacto'")
+    
     print(f"Now you can run ns_reconstruction.py with --data_dir {output_dir}")
     print(f"The data is organized in the expected directory structure: {output_dir}/scenes/{scene_id}/")
 
 if __name__ == "__main__":
     args = parse_args()
-    organize_for_nerfstudio(args.input_dir, args.output_dir, args.scene_id)
+    organize_for_nerfstudio(args.input_dir, args.output_dir, args.scene_id, args.use_depth)

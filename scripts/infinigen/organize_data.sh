@@ -124,6 +124,7 @@ for infinigen_dir in "${INFINIGEN_DIRS[@]}"; do
         # Create output directories for this scene
         scene_output_dir="${OUTPUT_BASE}/scenes/${scene_id}"
         mkdir -p "${scene_output_dir}/infinigen_images"
+        mkdir -p "${scene_output_dir}/depth_images"
         mkdir -p "${scene_output_dir}/gt_density"
         mkdir -p "${scene_output_dir}/camview"
         
@@ -174,6 +175,23 @@ for infinigen_dir in "${INFINIGEN_DIRS[@]}"; do
             SKIPPED_SEEDS=$((SKIPPED_SEEDS+1))
             rm -rf "${scene_output_dir}"
             continue
+        fi
+        
+        # Copy depth images for depth supervision
+        if [ -d "${scene_dir}/frames/Depth" ]; then
+            echo "    Copying depth images for depth supervision"
+            for camera_dir in "${scene_dir}/frames/Depth"/*; do
+                if [ -d "$camera_dir" ]; then
+                    camera_id=$(basename "$camera_dir")
+                    mkdir -p "${scene_output_dir}/depth_images/${camera_id}"
+                    
+                    # Copy all depth PNG images
+                    find "$camera_dir" -name "*.png" -exec cp {} "${scene_output_dir}/depth_images/${camera_id}/" \;
+                fi
+            done
+            echo "    Depth images copied successfully"
+        else
+            echo "    Warning: No Depth directory found in ${scene_dir}/frames, continuing without depth supervision"
         fi
         
         # Copy density ground truth images
