@@ -200,9 +200,15 @@ def evaluate_density_against_gt(rendered_density, rendered_rgb, gt_density, gt_v
         
         # Filter out invalid pixels:
         # 1. Exclude -1 values in ground truth (indicates missing data)
-        # 2. Exclude very low values (close to zero) to avoid divide by zero errors
-        # 3. Ensure both predictions and ground truth are positive for meaningful comparison
-        valid_mask = (gt_values > 0.1) & (gt_values != -1) & (pixel_values > 0.1)
+        # 2. Use less restrictive thresholds to capture more pixels
+        # 3. Print a debug message about the full range of values where GT is valid
+        valid_gt_mask = (gt_values != -1) & (gt_values > 0)
+        if np.any(valid_gt_mask):
+            print(f"DEBUG: Where GT is valid, rendered values range: [{np.min(pixel_values[valid_gt_mask]):.4f}, {np.max(pixel_values[valid_gt_mask]):.4f}]")
+            print(f"DEBUG: Number of GT valid pixels: {np.sum(valid_gt_mask)}")
+        
+        # For evaluation, we'll use pixels where either has a meaningful value
+        valid_mask = (gt_values != -1) & ((gt_values > 0) | (pixel_values > 0))
         valid_pred = pixel_values[valid_mask]
         valid_gt = gt_values[valid_mask]
         
@@ -343,6 +349,18 @@ def run_density_evaluation(args):
         plt.colorbar(label=f'Density (kg/m³) [{cmap_min:.1f} - {cmap_max:.1f}]')
         plt.title(f'Predicted Density Values - View {view_idx}')
         plt.savefig(os.path.join(output_dir, f'predicted_density_values_view_{view_idx}.png'))
+        plt.close()
+        
+        # Create a debug visualization to show which pixels have actual values
+        # This helps diagnose sparse point cloud projection issues
+        filled_mask = rendered_density > 0
+        filled_pixel_count = np.sum(filled_mask)
+        filled_percentage = filled_pixel_count / (hw[0] * hw[1]) * 100
+        
+        plt.figure(figsize=(10, 10))
+        plt.imshow(filled_mask, cmap='gray')
+        plt.title(f'Filled Pixels Mask - View {view_idx}\n{filled_pixel_count} filled pixels ({filled_percentage:.2f}%)')
+        plt.savefig(os.path.join(output_dir, f'filled_pixels_mask_view_{view_idx}.png'))
         plt.close()
         
         # Save both NPY (for evaluation) and NPZ (for full metadata)
