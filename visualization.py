@@ -52,6 +52,13 @@ def values_to_colors(values, low, high):
 def render_pcd(pcd, w2c, K, hw=(1024, 1024), pt_size=8, savefile=None, show=False):
     h, w = hw
 
+    # Enable headless rendering if show is False
+    if not show:
+        # Set environment variable for headless GPU rendering
+        os.environ['EGL_PLATFORM'] = 'surfaceless'
+        # Use non-interactive matplotlib backend if needed
+        plt.switch_backend('Agg')
+    
     # set pinhole camera parameters from K
     render_camera = o3d.camera.PinholeCameraParameters()
     render_camera.extrinsic = w2c
@@ -98,6 +105,10 @@ def composite_and_save(img1, img2, alpha, savefile):
 
 
 def make_legend(colors, names, ncol=1, figsize=(2.0, 2.5), savefile=None, show=False):
+    # Switch to non-interactive backend if show is False
+    if not show:
+        plt.switch_backend('Agg')
+    
     plt.style.use('fast')
     plt.rcParams["font.family"] = "Times New Roman"
     fig = plt.figure(figsize=figsize)
@@ -122,8 +133,26 @@ def make_legend(colors, names, ncol=1, figsize=(2.0, 2.5), savefile=None, show=F
 
 
 if __name__ == '__main__':
+    print(f"Open3D version: {o3d.__version__}")
+    
+    # Set headless environment variable at the script start
+    # This ensures it's available before first Open3D call
+    os.environ['EGL_PLATFORM'] = 'surfaceless'
 
     args = get_args()
+
+    # Detect if we're running on a headless system (like a compute cluster)
+    # and override the show parameter if needed
+    try:
+        # Try to get a display - if this fails, we're headless
+        import tkinter
+        tkinter.Tk().destroy()
+        print("Display found - can run in interactive mode if requested")
+    except:
+        print("No display found - forcing headless mode")
+        args.show = False
+    
+    print(f"Running with show={args.show}")
 
     scenes_dir = os.path.join(args.data_dir, 'scenes')
 
