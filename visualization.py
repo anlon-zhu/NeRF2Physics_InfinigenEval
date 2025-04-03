@@ -61,56 +61,31 @@ def render_pcd(pcd, w2c, K, hw=(1024, 1024), pt_size=8, savefile=None, show=Fals
     render_camera.intrinsic = intrinsic
 
     # visualize pcd from camera view with intrinsics set to K
-    # Set headless flag for clusters without displays
     vis = o3d.visualization.Visualizer()
-    try:
-        # Try with headless rendering for cluster environments
-        vis.create_window(width=w, height=h, visible=show, renderer='headless')
-    except Exception as e:
-        print(f"Warning: Headless renderer not available, falling back to default: {e}")
-        vis.create_window(width=w, height=h, visible=show)
+    vis.create_window(width=w, height=h, visible=show)
     
     vis.add_geometry(pcd)
     ctr = vis.get_view_control()
-    # Check if view control is properly initialized
-    if ctr is None:
-        print("Error: View control is None. Visualization context may not be properly initialized.")
-        vis.destroy_window()
-        # Return a placeholder image of the correct size
-        return np.zeros((h, w, 3))
-    
-    try:
-        ctr.convert_from_pinhole_camera_parameters(render_camera, allow_arbitrary=True)
+    ctr.convert_from_pinhole_camera_parameters(render_camera, allow_arbitrary=True)
 
-        # rendering options
-        render_option = vis.get_render_option()
-        render_option.point_size = pt_size
-        render_option.point_show_normal = False
-        render_option.light_on = False
-        vis.update_renderer()
-    except Exception as e:
-        print(f"Error during rendering setup: {e}")
-        vis.destroy_window()
-        # Return a placeholder image of the correct size
-        return np.zeros((h, w, 3))
+    # rendering options
+    render_option = vis.get_render_option()
+    render_option.point_size = pt_size
+    render_option.point_show_normal = False
+    render_option.light_on = False
+    vis.update_renderer()
 
     if show:
         vis.run()
 
-    try:
-        if savefile is not None:
-            vis.capture_screen_image(savefile, do_render=True)
-            vis.destroy_window()
-            return Image.open(savefile)
-        else:
-            render = vis.capture_screen_float_buffer(do_render=True)
-            vis.destroy_window()
-            return np.array(render)
-    except Exception as e:
-        print(f"Error during rendering or capture: {e}")
+    if savefile is not None:
+        vis.capture_screen_image(savefile, do_render=True)
         vis.destroy_window()
-        # Return a placeholder image of the correct size
-        return np.zeros((h, w, 3))
+        return Image.open(savefile)
+    else:
+        render = vis.capture_screen_float_buffer(do_render=True)
+        vis.destroy_window()
+        return np.array(render)
 
 
 def composite_and_save(img1, img2, alpha, savefile):
@@ -220,4 +195,3 @@ if __name__ == '__main__':
     if not args.show:
         combined = composite_and_save(orig_img, render, args.compositing_alpha,
             savefile=os.path.join(out_dir, '%s_%s.png' % (args.viz_save_name, args.property_name)))
-
