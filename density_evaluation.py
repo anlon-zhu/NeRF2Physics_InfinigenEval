@@ -351,6 +351,19 @@ def run_density_evaluation(args):
         plt.savefig(os.path.join(output_dir, f'predicted_density_values_view_{view_idx}.png'))
         plt.close()
         
+        # Create enhanced visualization with only non-zero points
+        # This makes sparse points more visible
+        nonzero_mask = rendered_density > 0
+        if np.any(nonzero_mask):
+            plt.figure(figsize=(10, 10))
+            nonzero_density = np.copy(rendered_density)
+            nonzero_density[nonzero_density == 0] = np.nan  # NaN values appear transparent
+            plt.imshow(nonzero_density, cmap='jet', interpolation='none')
+            plt.colorbar(label=f'Density (kg/m³) [{cmap_min:.1f} - {cmap_max:.1f}]')
+            plt.title(f'Non-zero Density Points - View {view_idx}\n{np.sum(nonzero_mask)} points')
+            plt.savefig(os.path.join(output_dir, f'nonzero_density_view_{view_idx}.png'))
+            plt.close()
+        
         # Create a debug visualization to show which pixels have actual values
         # This helps diagnose sparse point cloud projection issues
         filled_mask = rendered_density > 0
