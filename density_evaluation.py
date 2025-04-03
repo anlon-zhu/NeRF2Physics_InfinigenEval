@@ -12,7 +12,7 @@ from predict_property import predict_physical_property_query
 from utils import load_ns_point_cloud, parse_transforms_json, load_images, parse_dataparser_transforms_json
 from arguments import get_args
 from evaluation import ADE, ALDE, APE, MnRE, show_metrics
-from visualization import render_pcd, values_to_colors
+from visualization import render_pcd_headless, values_to_colors
 
 
 def predict_point_densities(args, scene_dir, clip_model, clip_tokenizer):
@@ -62,7 +62,7 @@ def render_density_from_camera_view(points, density_values, w2c, K, hw=(1024, 10
     val_pcd.colors = o3d.utility.Vector3dVector(colors)
     
     # Render from the camera view to get the RGB visualization
-    rendered_rgb = render_pcd(val_pcd, w2c, K, hw=hw, show=False)
+    rendered_rgb = render_pcd_headless(val_pcd, w2c, K, hw=hw)
     
     # Now create a density value map using the same camera parameters
     # We'll create this directly rather than extracting it from the RGB image

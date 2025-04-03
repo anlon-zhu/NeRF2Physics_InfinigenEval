@@ -49,16 +49,9 @@ def values_to_colors(values, low, high):
     return colors[:, :3]
 
 
-def render_pcd(pcd, w2c, K, hw=(1024, 1024), pt_size=8, savefile=None, show=False):
+def render_pcd_interactive(pcd, w2c, K, hw=(1024, 1024), pt_size=8, savefile=None, show=False):
     h, w = hw
 
-    # Enable headless rendering if show is False
-    if not show:
-        # Set environment variable for headless GPU rendering
-        os.environ['EGL_PLATFORM'] = 'surfaceless'
-        # Use non-interactive matplotlib backend if needed
-        plt.switch_backend('Agg')
-    
     # set pinhole camera parameters from K
     render_camera = o3d.camera.PinholeCameraParameters()
     render_camera.extrinsic = w2c
@@ -93,6 +86,39 @@ def render_pcd(pcd, w2c, K, hw=(1024, 1024), pt_size=8, savefile=None, show=Fals
         render = vis.capture_screen_float_buffer(do_render=True)
         vis.destroy_window()
         return np.array(render)
+
+def render_pcd_headless(pcd, w2c, K, hw=(1024, 1024), pt_size=8):
+    h, w = hw
+    
+    # Create offscreen renderer
+    renderer = o3d.visualization.rendering.OffscreenRenderer(w, h)
+    
+    # Add point cloud to scene
+    material = o3d.visualization.rendering.MaterialRecord()
+    material.shader = "defaultUnlit"
+    material.point_size = pt_size
+    renderer.scene.add_geometry("pointcloud", pcd, material)
+    
+    # Set up camera
+    fov = 2 * np.arctan(h / (2 * K[1, 1])) * 180 / np.pi
+    
+    # Convert w2c to camera parameters
+    R = w2c[:3, :3]
+    t = w2c[:3, 3]
+    eye = -np.dot(R.T, t)  # Camera position
+    forward = -R[2, :]
+    center = eye + forward  # Look-at point
+    up = -R[1, :]  # Up vector
+    
+    renderer.setup_camera(float(fov), 
+                         np.array(center, dtype=np.float32), 
+                         np.array(eye, dtype=np.float32), 
+                         np.array(up, dtype=np.float32))
+    
+    # Render the image
+    img = renderer.render_to_image()
+    return np.asarray(img)
+
 
 
 def composite_and_save(img1, img2, alpha, savefile):
@@ -191,7 +217,11 @@ if __name__ == '__main__':
     # RGB reconstruction
     rgb_pcd = o3d.io.read_point_cloud(pcd_file)
     rgb_pcd.points = o3d.utility.Vector3dVector(query_pts.cpu().numpy())
-    render = render_pcd(rgb_pcd, w2c, K, show=args.show)
+
+    if args.show:
+        render = render_pcd_interactive(rgb_pcd, w2c, K, show=args.show)
+    else:
+        render = render_pcd_headless(rgb_pcd, w2c, K)
     if not args.show:
         Image.fromarray(imgs[view_idx]).save(os.path.join(out_dir, '%s_rgb.png' % args.viz_save_name))
 
@@ -200,7 +230,10 @@ if __name__ == '__main__':
     pca_pcd.points = o3d.utility.Vector3dVector(query_pts.cpu().numpy())
     colors_pca = features_to_colors(result['query_features'])
     pca_pcd.colors = o3d.utility.Vector3dVector(colors_pca)
-    render = render_pcd(pca_pcd, w2c, K, show=args.show)
+    if args.show:
+        render = render_pcd_interactive(pca_pcd, w2c, K, show=args.show)
+    else:
+        render = render_pcd_headless(pca_pcd, w2c, K)
     if not args.show:
         combined = composite_and_save(orig_img, render, args.compositing_alpha,
             savefile=os.path.join(out_dir, '%s_pca.png' % args.viz_save_name))
@@ -210,7 +243,10 @@ if __name__ == '__main__':
     seg_pcd.points = o3d.utility.Vector3dVector(query_pts.cpu().numpy())
     colors_seg = similarities_to_colors(result['query_similarities'])
     seg_pcd.colors = o3d.utility.Vector3dVector(colors_seg)
-    render = render_pcd(seg_pcd, w2c, K, show=args.show)
+    if args.show:
+        render = render_pcd_interactive(seg_pcd, w2c, K, show=args.show)
+    else:
+        render = render_pcd_headless(seg_pcd, w2c, K)
     if not args.show:
         combined = composite_and_save(orig_img, render, args.compositing_alpha,
             savefile=os.path.join(out_dir, '%s_seg.png' % args.viz_save_name))
@@ -220,7 +256,10 @@ if __name__ == '__main__':
     val_pcd.points = o3d.utility.Vector3dVector(query_pts.cpu().numpy())
     colors_val = values_to_colors(np.mean(result['query_pred_vals'], axis=1), args.cmap_min, args.cmap_max)
     val_pcd.colors = o3d.utility.Vector3dVector(colors_val)
-    render = render_pcd(val_pcd, w2c, K, show=args.show)
+    if args.show:
+        render = render_pcd_interactive(val_pcd, w2c, K, show=args.show)
+    else:
+        render = render_pcd_headless(val_pcd, w2c, K)
     if not args.show:
         combined = composite_and_save(orig_img, render, args.compositing_alpha,
             savefile=os.path.join(out_dir, '%s_%s.png' % (args.viz_save_name, args.property_name)))
