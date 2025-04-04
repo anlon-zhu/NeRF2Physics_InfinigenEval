@@ -285,14 +285,7 @@ class InfinigenDataset:
             # Create nerfstudio frame
             nerfstudio_frame = {
                 "file_path": f"../images/{seq_name}",
-                "transform_matrix": T.tolist(),
-                "height": int(intrinsics['height']),
-                "width": int(intrinsics['width']),
-                "camera_model": "OPENCV",
-                "fl_x": float(intrinsics['fx']),
-                "fl_y": float(intrinsics['fy']),
-                "cx": float(intrinsics['cx']),
-                "cy": float(intrinsics['cy'])
+                "transform_matrix": T.tolist()
             }
             if depth_file_path:
                 nerfstudio_frame["depth_file_path"] = depth_file_path
@@ -353,7 +346,7 @@ class InfinigenDataset:
             f.write("#   POINT3D_ID, X, Y, Z, R, G, B, ERROR, TRACK[] as (IMAGE_ID, POINT2D_IDX)\n")
             f.write("# Number of points: 0\n")
     
-    def _create_nerfstudio_files(self, dirs, nerfstudio_frames):
+    def _create_nerfstudio_files(self, dirs, nerfstudio_frames, intrinsics=None):
         """Create nerfstudio format files
         
         Args:
@@ -363,6 +356,18 @@ class InfinigenDataset:
         # Write nerfstudio dataparser_transforms.json
         nerfstudio_data = {
             "camera_model": "OPENCV",
+            "fl_x": float(intrinsics['fx']),
+            "fl_y": float(intrinsics['fy']),
+            "cx": float(intrinsics['cx']),
+            "cy": float(intrinsics['cy']),
+            "w": int(intrinsics['width']),
+            "h": int(intrinsics['height']),
+            "k1": 0.0,
+            "k2": 0.0,
+            "k3": 0.0,
+            "k4": 0.0,
+            "p1": 0.0,
+            "p2": 0.0,
             "frames": nerfstudio_frames,
             "scene_scale": 1.0,
             "scene_center": [0.0, 0.0, 0.0]
@@ -444,7 +449,7 @@ class InfinigenDataset:
         self._create_colmap_files(common_view_ids, dirs, colmap_frames)
         
         # Create nerfstudio format files
-        self._create_nerfstudio_files(dirs, nerfstudio_frames)
+        self._create_nerfstudio_files(dirs, nerfstudio_frames, intrinsics)
         
         # Create a dummy point cloud file if requested
         if create_point_cloud:
