@@ -272,13 +272,7 @@ class InfinigenDataset:
             # Create COLMAP frame
             colmap_frame = {
                 "file_path": f"images/{seq_name}",
-                "height": int(intrinsics['height']),
-                "width": int(intrinsics['width']),
-                "camera_model": "PINHOLE",
-                "camera_params": [float(intrinsics['fx']), float(intrinsics['fy']), 
-                                  float(intrinsics['cx']), float(intrinsics['cy'])],
-                "rotation": [float(q) for q in quat],
-                "translation": [float(t) for t in t]
+                "transform_matrix": T.tolist()
             }
             colmap_frames.append(colmap_frame)
             
@@ -294,7 +288,7 @@ class InfinigenDataset:
             
         return colmap_frames, nerfstudio_frames
     
-    def _create_colmap_files(self, common_view_ids, dirs, colmap_frames):
+    def _create_colmap_files(self, common_view_ids, dirs, colmap_frames, intrinsics=None):
         """Create COLMAP format files
         
         Args:
@@ -306,6 +300,13 @@ class InfinigenDataset:
         
         # Write COLMAP transforms.json
         colmap_data = {
+            "camera_model": "PINHOLE",
+            "fl_x": float(intrinsics['fx']),
+            "fl_y": float(intrinsics['fy']),
+            "cx": float(intrinsics['cx']),
+            "cy": float(intrinsics['cy']),
+            "w": int(intrinsics['width']),
+            "h": int(intrinsics['height']),
             "frames": colmap_frames
         }
         with open(dirs['scene_dir'] / 'transforms.json', 'w') as f:
@@ -446,7 +447,7 @@ class InfinigenDataset:
         colmap_frames, nerfstudio_frames = self._process_images(common_view_ids, dirs, intrinsics)
         
         # Create COLMAP format files
-        self._create_colmap_files(common_view_ids, dirs, colmap_frames)
+        self._create_colmap_files(common_view_ids, dirs, colmap_frames, intrinsics)
         
         # Create nerfstudio format files
         self._create_nerfstudio_files(dirs, nerfstudio_frames, intrinsics)
