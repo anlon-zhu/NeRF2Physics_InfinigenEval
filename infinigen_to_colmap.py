@@ -289,12 +289,10 @@ class InfinigenDataset:
                 "height": int(intrinsics['height']),
                 "width": int(intrinsics['width']),
                 "camera_model": "OPENCV",
-                "camera_params": {
-                    "fx": float(intrinsics['fx']),
-                    "fy": float(intrinsics['fy']),
-                    "cx": float(intrinsics['cx']),
-                    "cy": float(intrinsics['cy'])
-                }
+                "fl_x": float(intrinsics['fx']),
+                "fl_y": float(intrinsics['fy']),
+                "cx": float(intrinsics['cx']),
+                "cy": float(intrinsics['cy'])
             }
             if depth_file_path:
                 nerfstudio_frame["depth_file_path"] = depth_file_path
