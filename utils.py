@@ -117,18 +117,92 @@ def load_images(img_dir, bg_change=255, return_masks=False):
 
 
 def load_depths(depth_dir, Ks):
-    depth_files = os.listdir(depth_dir)
-    depth_files.sort()
+    # Get all files in the depth directory
+    all_files = os.listdir(depth_dir)
+    all_files.sort()
+    
+    # Filter for .npy.gz and .exr files
+    npy_files = [f for f in all_files if f.endswith('.npy.gz')]
+    exr_files = [f for f in all_files if f.endswith('.exr')]
+    
+    # Make sure we have files to process
+    if not npy_files and not exr_files:
+        raise FileNotFoundError(f"No depth files (.npy.gz or .exr) found in {depth_dir}")
+    
     depths = []
-    for i, depth_file in enumerate(depth_files):
-        # load npy.gz depth file
-        with gzip.open(os.path.join(depth_dir, depth_file), 'rb') as f:
-            dist = np.load(f)[:, :, 0]
-        if Ks is not None:
-            depth = distance_to_depth(dist, Ks[i])
-        else:
-            depth = dist
-        depths.append(depth)
+    
+    # Determine which file type to use
+    if npy_files:
+        files_to_use = npy_files
+        use_npy = True
+        print(f"Using {len(files_to_use)} .npy.gz files for depth")
+    else:
+        files_to_use = exr_files
+        use_npy = False
+        print(f"Using {len(files_to_use)} .exr files for depth")
+    
+    files_to_use.sort()
+    
+    for i, depth_file in enumerate(files_to_use):
+        file_path = os.path.join(depth_dir, depth_file)
+        
+        try:
+            if use_npy:
+                # Try to load npy.gz depth file
+                try:
+                    with gzip.open(file_path, 'rb') as f:
+                        dist = np.load(f)[:, :, 0]
+                except Exception as e:
+                    print(f"Error loading {depth_file} as gzipped numpy: {e}")
+                    # If we have a corresponding EXR file, try that instead
+                    exr_file = depth_file.replace('.npy.gz', '.exr')
+                    if exr_file in exr_files:
+                        print(f"Falling back to {exr_file}")
+                        import OpenEXR
+                        import Imath
+                        import array
+                        exr_path = os.path.join(depth_dir, exr_file)
+                        exr = OpenEXR.InputFile(exr_path)
+                        dw = exr.header()['dataWindow']
+                        size = (dw.max.x - dw.min.x + 1, dw.max.y - dw.min.y + 1)
+                        pt = Imath.PixelType(Imath.PixelType.FLOAT)
+                        depth_str = exr.channel('R', pt)
+                        dist = np.frombuffer(depth_str, dtype=np.float32)
+                        dist = dist.reshape(size[1], size[0])
+                    else:
+                        raise
+            else:
+                # Load EXR file directly
+                import OpenEXR
+                import Imath
+                import array
+                exr = OpenEXR.InputFile(file_path)
+                dw = exr.header()['dataWindow']
+                size = (dw.max.x - dw.min.x + 1, dw.max.y - dw.min.y + 1)
+                pt = Imath.PixelType(Imath.PixelType.FLOAT)
+                depth_str = exr.channel('R', pt)
+                dist = np.frombuffer(depth_str, dtype=np.float32)
+                dist = dist.reshape(size[1], size[0])
+            
+            # Process the depth data
+            if Ks is not None:
+                depth = distance_to_depth(dist, Ks[i])
+            else:
+                depth = dist
+                
+            depths.append(depth)
+            
+        except Exception as e:
+            print(f"Failed to load depth file {depth_file}: {e}")
+            # Add a dummy depth to maintain indexing
+            if depths:
+                # Use the same shape as previous depths
+                dummy_shape = depths[-1].shape
+                depths.append(np.zeros(dummy_shape))
+            else:
+                # No previous depths to reference, raise the error
+                raise
+    
     return depths
 
 
