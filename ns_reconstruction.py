@@ -41,15 +41,10 @@ if __name__ == '__main__':
             'ns-train', 'nerfacto',
             '--data', scene_dir,
             '--output_dir', base_dir,
-            '--vis', args.vis_mode,
             '--project_name', args.project_name,
             '--experiment_name', scene,
             '--max_num_iterations', str(args.training_iters),
-            '--pipeline.model.background-color', 'random',
-            '--pipeline.model.camera-optimizer.mode', 'off',
             '--pipeline.model.proposal-initial-sampler', 'uniform',
-            '--pipeline.model.near-plane', str(args.near_plane),
-            '--pipeline.model.far-plane', str(args.far_plane),
             '--steps-per-eval-image', '10000',
         ]
         
