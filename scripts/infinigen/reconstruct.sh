@@ -4,11 +4,11 @@
 #SBATCH --error=/n/fs/scratch/%u/nerf2physics/logs/%x_%j.err
 #SBATCH --partition=pvl
 #SBATCH --account=pvl
-#SBATCH --time=24:00:00
+#SBATCH --time=12:00:00
 #SBATCH --ntasks=1
-#SBATCH --cpus-per-task=8
-#SBATCH --mem=128G
-#SBATCH --gres=gpu:rtx_2080:1
+#SBATCH --cpus-per-task=2
+#SBATCH --mem=64G
+#SBATCH --gres=gpu:rtx_3090:1
 #SBATCH --mail-type=BEGIN,END,FAIL
 #SBATCH --mail-user=az4244@princeton.edu
 
@@ -84,7 +84,7 @@ is_scene_reconstructed() {
     # If not in metadata, check if "ns" directory exists and has necessary files
     if [ -d "$ns_dir" ]; then
         # Check for typical files that indicate a complete reconstruction
-        if [ -d "${ns_dir}/pointcloud" ] || [ -d "${ns_dir}/renders" ] || [ -f "${ns_dir}/dataparser_transforms.json" ]; then
+        if [ -d "${ns_dir}/pointcloud" ] && [ -d "${ns_dir}/renders" ] && [ -f "${ns_dir}/dataparser_transforms.json" ]; then
             echo "Scene $scene has ns directory with expected content - marking as reconstructed"
             
             # Directory exists with reconstruction artifacts, mark it in metadata
