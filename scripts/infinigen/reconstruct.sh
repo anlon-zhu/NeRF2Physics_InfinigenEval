@@ -2,7 +2,9 @@
 #SBATCH --job-name=nerf_reconstruct
 #SBATCH --output=/n/fs/scratch/%u/nerf2physics/logs/%x_%j.out
 #SBATCH --error=/n/fs/scratch/%u/nerf2physics/logs/%x_%j.err
-#SBATCH --partition=cs
+#SBATCH --partition=pvl
+#SBATCH --reservation=pvl-interactive
+#SBATCH --account=pvl
 #SBATCH --time=12:00:00
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=2
