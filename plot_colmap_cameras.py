@@ -52,7 +52,7 @@ def read_colmap_images_file(file_path):
     
     return np.array(positions), orientations
 
-def plot_camera_positions(dataset, title=None, show_axes=True, show_paths=True, colmap_images_file=None, colmap_only=False):
+def plot_camera_positions(dataset, title=None, show_axes=True, show_paths=True, colmap_images_file=None, colmap_only=False, show_directions=False, direction_scale=0.5):
     """Plot camera positions from an InfinigenDataset
     
     Args:
@@ -108,14 +108,14 @@ def plot_camera_positions(dataset, title=None, show_axes=True, show_paths=True, 
                        'g-', alpha=0.7, label='COLMAP Camera Path')
                 
             # Draw COLMAP coordinate axes if requested
-            if show_axes:
-                axis_scale = 0.2
-                for i, (pos, rot) in enumerate(zip(colmap_positions, colmap_orientations)):
-                    # Camera coordinate axes
-                    x_axis = rot[:, 0] * axis_scale
-                    y_axis = rot[:, 1] * axis_scale
-                    z_axis = rot[:, 2] * axis_scale
+            axis_scale = 0.2
+            for i, (pos, rot) in enumerate(zip(colmap_positions, colmap_orientations)):
+                # Camera coordinate axes
+                x_axis = rot[:, 0] * axis_scale
+                y_axis = rot[:, 1] * axis_scale
+                z_axis = rot[:, 2] * axis_scale
                     
+                if show_axes:
                     # Draw the axes (only add to legend for the first camera)
                     ax.quiver(pos[0], pos[1], pos[2], x_axis[0], x_axis[1], x_axis[2],
                              color='darkred', alpha=0.8, label='COLMAP X axis' if i == 0 else None)
@@ -123,6 +123,12 @@ def plot_camera_positions(dataset, title=None, show_axes=True, show_paths=True, 
                              color='darkgreen', alpha=0.8, label='COLMAP Y axis' if i == 0 else None)
                     ax.quiver(pos[0], pos[1], pos[2], z_axis[0], z_axis[1], z_axis[2],
                              color='darkblue', alpha=0.8, label='COLMAP Z axis' if i == 0 else None)
+                    
+                # Draw direction vector if requested (negative Z-axis is the camera's viewing direction)
+                if show_directions:
+                    direction = -z_axis * direction_scale
+                    ax.quiver(pos[0], pos[1], pos[2], direction[0], direction[1], direction[2],
+                                color='magenta', alpha=1.0, linewidth=2, label='COLMAP Direction' if i == 0 else None)
         except Exception as e:
             print(f"Error reading COLMAP images file: {e}")
     
@@ -149,6 +155,12 @@ def plot_camera_positions(dataset, title=None, show_axes=True, show_paths=True, 
                       color='g', alpha=0.8, label='Infinigen Y axis' if i == 0 else None)
             ax.quiver(pos[0], pos[1], pos[2], z_axis[0], z_axis[1], z_axis[2], 
                       color='b', alpha=0.8, label='Infinigen Z axis' if i == 0 else None)
+                      
+            # Draw direction vector if requested (negative Z-axis is the camera's viewing direction)
+            if show_directions:
+                direction = -z_axis * direction_scale
+                ax.quiver(pos[0], pos[1], pos[2], direction[0], direction[1], direction[2],
+                         color='magenta', alpha=1.0, linewidth=2, label='Infinigen Direction' if i == 0 else None)
     
     # Set labels and title
     ax.set_xlabel('X')
@@ -207,6 +219,8 @@ def main():
     parser.add_argument("--no_paths", action="store_true", help="Don't show camera paths")
     parser.add_argument("--colmap_dir", type=str, help="Path to COLMAP output directory (to compare with converted camera positions)")
     parser.add_argument("--colmap_only", action="store_true", help="Only plot COLMAP cameras (requires --colmap_dir)")
+    parser.add_argument("--show_directions", action="store_true", help="Show camera direction vectors")
+    parser.add_argument("--direction_scale", type=float, default=0.5, help="Scale factor for direction vectors (default: 0.5)")
     args = parser.parse_args()
     
     input_dir = Path(args.input_dir)
@@ -244,7 +258,8 @@ def main():
             colmap_only = args.colmap_only
             
         plot_camera_positions(dataset, show_axes=not args.no_axes, show_paths=not args.no_paths,
-                             colmap_images_file=colmap_images_file, colmap_only=colmap_only)
+                             colmap_images_file=colmap_images_file, colmap_only=colmap_only,
+                             show_directions=args.show_directions, direction_scale=args.direction_scale)
         
     elif (input_dir / "frames").exists():
         # Input directory is already a scene directory
@@ -270,7 +285,8 @@ def main():
             colmap_only = args.colmap_only
             
         plot_camera_positions(dataset, show_axes=not args.no_axes, show_paths=not args.no_paths,
-                             colmap_images_file=colmap_images_file, colmap_only=colmap_only)
+                             colmap_images_file=colmap_images_file, colmap_only=colmap_only,
+                             show_directions=args.show_directions, direction_scale=args.direction_scale)
         
     else:
         # Input directory might contain multiple scenes
@@ -306,7 +322,8 @@ def main():
                 
             plot_camera_positions(dataset, title=f"Camera Positions for {scene_dir.name}", 
                                  show_axes=not args.no_axes, show_paths=not args.no_paths,
-                                 colmap_images_file=colmap_images_file, colmap_only=colmap_only)
+                                 colmap_images_file=colmap_images_file, colmap_only=colmap_only,
+                                 show_directions=args.show_directions, direction_scale=args.direction_scale)
 
 if __name__ == "__main__":
     main()

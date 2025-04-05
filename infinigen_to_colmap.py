@@ -221,12 +221,14 @@ class InfinigenDataset:
             intrinsics: Camera intrinsics
             
         Returns:
-            Tuple of (colmap_frames, nerfstudio_frames)
+            Tuple of (colmap_frames, nerfstudio_frames, transformed_cameras)
+            transformed_cameras: Dictionary mapping view_id to transformed camera matrix
         """
         from scipy.spatial.transform import Rotation
         
         colmap_frames = []
         nerfstudio_frames = []
+        transformed_cameras = {}
         
         for idx, view_id in enumerate(common_view_ids):
             # Get camera and image data
@@ -260,41 +262,58 @@ class InfinigenDataset:
                 
                 depth_file_path = f"renders/depth/{depth_seq_name}"
             
-            # Extract rotation and translation from transformation matrix
-            rotation_matrix = T[:3, :3]
-            t = T[:3, 3]
+            # We'll use the original transformation matrix from camview
+            # But we need to convert between coordinate systems
+            # NeRF/COLMAP expects a different convention than what might be in the camview data
             
-            # Convert to quaternion for COLMAP
-            r = Rotation.from_matrix(rotation_matrix)
-            quat = r.as_quat()  # x, y, z, w
-            quat = np.array([quat[3], quat[0], quat[1], quat[2]])  # Convert to w, x, y, z
+            # Create a coordinate transformation matrix to convert between conventions
+            # This matrix converts from OpenCV/Blender to OpenGL/NeRF convention
+            # It flips the y and z axes to match the expected convention in NeRF
+            convention_change = np.array([
+                [1,  0,  0, 0],
+                [0, -1,  0, 0],
+                [0,  0, -1, 0],
+                [0,  0,  0, 1]
+            ])
+            
+            # Apply the convention change to the transformation matrix
+            T_fixed = T @ convention_change
+            
+            # Store the transformed camera for later use
+            transformed_cameras[view_id] = {
+                'T': T_fixed,
+                'seq_idx': idx,
+                'seq_name': seq_name
+            }
             
             # Create COLMAP frame
             colmap_frame = {
                 "file_path": f"images/{seq_name}",
-                "transform_matrix": T.tolist()
+                "transform_matrix": T_fixed.tolist()
             }
             colmap_frames.append(colmap_frame)
             
             # Create nerfstudio frame
             nerfstudio_frame = {
                 "file_path": f"../images/{seq_name}",
-                "transform_matrix": T.tolist()
+                "transform_matrix": T_fixed.tolist()
             }
             if depth_file_path:
                 nerfstudio_frame["depth_file_path"] = depth_file_path
             
             nerfstudio_frames.append(nerfstudio_frame)
             
-        return colmap_frames, nerfstudio_frames
+        return colmap_frames, nerfstudio_frames, transformed_cameras
     
-    def _create_colmap_files(self, common_view_ids, dirs, colmap_frames, intrinsics=None):
+    def _create_colmap_files(self, common_view_ids, dirs, colmap_frames, intrinsics=None, transformed_cameras=None):
         """Create COLMAP format files
         
         Args:
             common_view_ids: List of view IDs that have both camera and image data
             dirs: Dictionary of directories
             colmap_frames: List of COLMAP frame data
+            intrinsics: Camera intrinsics
+            transformed_cameras: Dictionary of transformed camera matrices from _process_images
         """
         from scipy.spatial.transform import Rotation
         
@@ -319,14 +338,16 @@ class InfinigenDataset:
             f.write("#   POINTS2D[] as (X, Y, POINT3D_ID)\n")
             f.write(f"# Number of images: {len(common_view_ids)}\n")
             
-            for idx, view_id in enumerate(common_view_ids, 1):
-                # Get camera data
-                cam_data = self.camera_data[view_id]
-                T = cam_data['T']
+            for view_id in common_view_ids:
+                # Get transformed camera data
+                cam_info = transformed_cameras[view_id]
+                T_fixed = cam_info['T']
+                seq_idx = cam_info['seq_idx']
+                seq_name = cam_info['seq_name']
                 
                 # Extract rotation and translation
-                rotation_matrix = T[:3, :3]
-                t = T[:3, 3]
+                rotation_matrix = T_fixed[:3, :3]
+                t = T_fixed[:3, 3]
                 
                 # Convert to quaternion
                 r = Rotation.from_matrix(rotation_matrix)
@@ -337,7 +358,7 @@ class InfinigenDataset:
                 quat = quat / np.linalg.norm(quat)
                 
                 # Write image data
-                f.write(f"{idx} {quat[0]} {quat[1]} {quat[2]} {quat[3]} {t[0]} {t[1]} {t[2]} 1 {idx:03d}.png\n")
+                f.write(f"{seq_idx} {quat[0]} {quat[1]} {quat[2]} {quat[3]} {t[0]} {t[1]} {t[2]} 1 {seq_name}\n")
                 # Empty line for POINTS2D (not needed for NeRF)
                 f.write("\n")
         
@@ -444,10 +465,10 @@ class InfinigenDataset:
         self._create_cameras_txt(dirs['sparse_dir'], intrinsics)
         
         # Process images and create frame data
-        colmap_frames, nerfstudio_frames = self._process_images(common_view_ids, dirs, intrinsics)
+        colmap_frames, nerfstudio_frames, transformed_cameras = self._process_images(common_view_ids, dirs, intrinsics)
         
         # Create COLMAP format files
-        self._create_colmap_files(common_view_ids, dirs, colmap_frames, intrinsics)
+        self._create_colmap_files(common_view_ids, dirs, colmap_frames, intrinsics, transformed_cameras)
         
         # Create nerfstudio format files
         self._create_nerfstudio_files(dirs, nerfstudio_frames, intrinsics)
