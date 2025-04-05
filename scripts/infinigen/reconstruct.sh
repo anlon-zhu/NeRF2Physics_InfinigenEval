@@ -9,7 +9,7 @@
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=2
 #SBATCH --mem=64G
-#SBATCH --gres=gpu:rtx_3090:1
+#SBATCH --gres=gpu:rtx_2080:1
 #SBATCH --mail-type=BEGIN,END,FAIL
 #SBATCH --mail-user=az4244@princeton.edu
 
