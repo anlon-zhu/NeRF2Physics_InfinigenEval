@@ -42,6 +42,7 @@ if [ ! -z "$SCENE_NAME" ]; then
     
     # Run feature fusion on specific scene
     python feature_fusion.py \
+        --debug \
         --data_dir ${DATA_DIR} \
         --scene_name ${SCENE_NAME}
     
@@ -51,6 +52,7 @@ else
     
     # Run feature fusion on all scenes
     python feature_fusion.py \
+        --debug \
         --data_dir ${DATA_DIR}
 fi
 
