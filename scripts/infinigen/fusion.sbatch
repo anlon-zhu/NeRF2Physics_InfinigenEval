@@ -39,14 +39,24 @@ echo "[$(date)] Starting Infinigen feature fusion process (Array Job ${SLURM_ARR
 export PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:512
 START_TIME=$(date +%s)
 
-# Get list of scene directories
-SCENE_DIRS=($(find ${DATA_DIR} -maxdepth 1 -type d | grep -v "^${DATA_DIR}$"))
-TOTAL_SCENES=${#SCENE_DIRS[@]}
+# Read scene list from file
+SCENE_LIST_FILE="${DATA_DIR}/scene_list.txt"
 
-if [ ${TOTAL_SCENES} -eq 0 ]; then
-    echo "No scene directories found in ${DATA_DIR}"
+if [ ! -f "${SCENE_LIST_FILE}" ]; then
+    echo "Error: Scene list file not found at ${SCENE_LIST_FILE}"
     exit 1
 fi
+
+# Read scenes into an array
+SCENE_NAMES=($(cat "${SCENE_LIST_FILE}"))
+TOTAL_SCENES=${#SCENE_NAMES[@]}
+
+if [ ${TOTAL_SCENES} -eq 0 ]; then
+    echo "No scenes found in ${SCENE_LIST_FILE}"
+    exit 1
+fi
+
+echo "Found ${TOTAL_SCENES} scenes in scene list file"
 
 # Calculate which scenes this node should process
 SCENES_PER_NODE=$(( (TOTAL_SCENES + 4) / 5 ))  # Ceiling division to distribute across 5 nodes
@@ -62,8 +72,7 @@ echo "Processing scenes ${START_IDX} to ${END_IDX} out of ${TOTAL_SCENES} total 
 
 # Process each scene assigned to this node
 for (( i=${START_IDX}; i<=${END_IDX}; i++ )); do
-    SCENE_PATH=${SCENE_DIRS[$i]}
-    SCENE_NAME=$(basename ${SCENE_PATH})
+    SCENE_NAME=${SCENE_NAMES[$i]}
     
     echo "\n[$(date)] Processing scene ${i}/${END_IDX}: ${SCENE_NAME}"
     
