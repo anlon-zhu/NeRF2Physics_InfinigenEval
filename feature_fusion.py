@@ -49,6 +49,45 @@ def setup_debug_environment(debug_mode):
             def __exit__(self, *args, **kwargs):
                 pass
         tqdm = NoOpTqdm
+    
+    # Configure PyTorch for optimal performance
+    if torch.cuda.is_available():
+        # Get GPU information
+        gpu_name = torch.cuda.get_device_name(0)
+        gpu_capability = torch.cuda.get_device_capability(0)
+        gpu_mem = torch.cuda.get_device_properties(0).total_memory / (1024**3)  # in GB
+        
+        # Log GPU information in debug mode
+        if debug_mode:
+            logging.info(f"Using GPU: {gpu_name} with {gpu_mem:.2f} GB memory")
+            logging.info(f"CUDA Capability: {gpu_capability[0]}.{gpu_capability[1]}")
+        
+        # Enable TF32 precision for Ampere GPUs (RTX 3090, compute capability 8.x)
+        if gpu_capability[0] >= 8:
+            torch.backends.cuda.matmul.allow_tf32 = True
+            torch.backends.cudnn.allow_tf32 = True
+            if debug_mode:
+                logging.info("Enabled TF32 precision for Ampere GPU")
+        
+        # Enable cudnn benchmark for faster convolutions when input sizes don't change
+        torch.backends.cudnn.benchmark = True
+        
+        # Set memory allocation strategy based on GPU type
+        if 'RTX 3090' in gpu_name or 'A100' in gpu_name:
+            # Higher memory fraction for high-end GPUs
+            torch.cuda.set_per_process_memory_fraction(0.95)
+            if debug_mode:
+                logging.info("Using 95% memory allocation for high-end GPU")
+        elif 'RTX 2080' in gpu_name:
+            # Slightly more conservative for RTX 2080
+            torch.cuda.set_per_process_memory_fraction(0.9)
+            if debug_mode:
+                logging.info("Using 90% memory allocation for RTX 2080")
+        else:
+            # More conservative for other GPUs like P100
+            torch.cuda.set_per_process_memory_fraction(0.85)
+            if debug_mode:
+                logging.info("Using 85% memory allocation for other GPU types")
 
 
 CLIP_BACKBONE = 'ViT-B-16'
@@ -58,7 +97,7 @@ CLIP_OUTPUT_SIZE = 512
 
 
 def get_patch_features(pts, imgs, depths, w2cs, K, model, preprocess_fn, occ_thr,
-                       patch_size=56, batch_size=8, device='cuda', debug_dir=None, debug_mode=False):
+                       patch_size=56, batch_size=64, device='cuda', debug_dir=None, debug_mode=False, num_workers=4):
     if debug_mode:
         logging.info(f"Starting feature extraction for {len(pts)} points across {len(imgs)} images")
         start_time = time.time()
@@ -76,59 +115,126 @@ def get_patch_features(pts, imgs, depths, w2cs, K, model, preprocess_fn, occ_thr
     occluded_points = 0
 
     K = np.array(K)
+    
+    # Pre-compute all projections for all images at once to avoid redundant computation
+    if debug_mode:
+        logging.info("Pre-computing all point projections...")
+    
+    all_pts_2d = []
+    all_dists = []
+    for i in range(n_imgs):
+        if len(K.shape) == 3:
+            curr_K = K[i]
+        else:
+            curr_K = K
+        pts_2d, dists = project_3d_to_2d(pts, w2cs[i], curr_K, return_dists=True)
+        pts_2d = np.round(pts_2d).astype(np.int32)
+        all_pts_2d.append(pts_2d)
+        all_dists.append(dists)
+    
+    # Create a preprocessing function that handles the entire patch extraction process
+    def process_patch(img, x, y, half_size):
+        patch = img[y - half_size:y + half_size, x - half_size:x + half_size]
+        return preprocess_fn(Image.fromarray(patch))
+    
+    # Process images with optimized batching
     with torch.no_grad(), torch.cuda.amp.autocast():
         model.to(device)
-
+        model.eval()  # Ensure model is in eval mode
+        
         for i in tqdm(range(n_imgs), desc="Processing images" if debug_mode else None):
             if debug_mode:
                 logging.info(f"Processing image {i+1}/{n_imgs}")
+            
             h, w, c = imgs[i].shape
-            if len(K.shape) == 3:
-                curr_K = K[i]
-            else:
-                curr_K = K
-            pts_2d, dists = project_3d_to_2d(pts, w2cs[i], curr_K, return_dists=True)
-            pts_2d = np.round(pts_2d).astype(np.int32)
-
+            pts_2d = all_pts_2d[i]
+            dists = all_dists[i]
             observed_dists = depths[i]
-        
-            # loop through pts in batches
-            for batch_start in tqdm(range(0, n_pts, batch_size), 
-                                   desc=f"Image {i+1} batches" if debug_mode else None, 
-                                   leave=False):
-                curr_batch_size = min(batch_size, n_pts - batch_start)
-                batch_patches = torch.zeros(curr_batch_size, 3, CLIP_INPUT_SIZE, CLIP_INPUT_SIZE, device=device)
+            
+            # Create a mask for points that are within bounds
+            in_bounds = ((pts_2d[:, 0] >= half_patch_size) & 
+                        (pts_2d[:, 0] < w - half_patch_size) & 
+                        (pts_2d[:, 1] >= half_patch_size) & 
+                        (pts_2d[:, 1] < h - half_patch_size))
+            
+            # Count out-of-bounds points for debug
+            if debug_mode:
+                out_of_bounds_points += np.sum(~in_bounds)
+            
+            # Only process points that are in bounds
+            valid_indices = np.where(in_bounds)[0]
+            
+            if len(valid_indices) == 0:
+                continue
                 
-                for j in range(curr_batch_size):
-                    x, y = pts_2d[batch_start + j]
-
-                    if x >= half_patch_size and x < w - half_patch_size and \
-                       y >= half_patch_size and y < h - half_patch_size:
-                        is_occluded = dists[batch_start + j] > observed_dists[y, x] + occ_thr
-                        if not is_occluded:
-                            patch = imgs[i][y - half_patch_size:y + half_patch_size, x - half_patch_size:x + half_patch_size]
-                            patch = Image.fromarray(patch)
-                            
-                            patch = preprocess_fn(patch).unsqueeze(0).to(device)
-                            batch_patches[j] = patch
-                            is_visible[i, batch_start + j] = True
-                            
-                            if debug_mode:
-                                points_per_image[i] += 1
-                                total_visible_points += 1
-                                
-                                # Save some sample patches for debugging (only a few to avoid excessive files)
-                                if debug_dir and (batch_start + j) % 100 == 0:
-                                    os.makedirs(os.path.join(debug_dir, f"image_{i}"), exist_ok=True)
-                                    patch_img = Image.fromarray(imgs[i][y - half_patch_size:y + half_patch_size, x - half_patch_size:x + half_patch_size])
-                                    patch_img.save(os.path.join(debug_dir, f"image_{i}", f"patch_{batch_start + j}.png"))
-                        elif debug_mode:
-                            occluded_points += 1
-                    elif debug_mode:
-                        out_of_bounds_points += 1
-
-                if is_visible[i, batch_start:batch_start + batch_size].any():
-                    patch_features[i, batch_start:batch_start + curr_batch_size] = model.encode_image(batch_patches)
+            # Check occlusion for all valid points at once
+            valid_pts_2d = pts_2d[valid_indices]
+            valid_dists = dists[valid_indices]
+            
+            # Get observed depths at these points
+            observed_depths_at_points = np.array([observed_dists[y, x] for x, y in valid_pts_2d])
+            
+            # Create occlusion mask
+            not_occluded = valid_dists <= (observed_depths_at_points + occ_thr)
+            
+            # Count occluded points for debug
+            if debug_mode:
+                occluded_points += np.sum(~not_occluded)
+            
+            # Get indices of visible points
+            visible_indices = valid_indices[not_occluded]
+            
+            if len(visible_indices) == 0:
+                continue
+                
+            # Update visibility mask
+            is_visible[i, visible_indices] = True
+            
+            # Update debug stats
+            if debug_mode:
+                points_per_image[i] += len(visible_indices)
+                total_visible_points += len(visible_indices)
+                
+                # Save sample patches for debugging (only a few)
+                if debug_dir:
+                    os.makedirs(os.path.join(debug_dir, f"image_{i}"), exist_ok=True)
+                    for sample_idx in visible_indices[::max(1, len(visible_indices)//10)][:5]:  # Save at most 5 samples
+                        x, y = pts_2d[sample_idx]
+                        patch_img = Image.fromarray(imgs[i][y - half_patch_size:y + half_patch_size, 
+                                                        x - half_patch_size:x + half_patch_size])
+                        patch_img.save(os.path.join(debug_dir, f"image_{i}", f"patch_{sample_idx}.png"))
+            
+            # Process visible points in batches
+            for batch_start in tqdm(range(0, len(visible_indices), batch_size),
+                                   desc=f"Image {i+1} batches" if debug_mode else None,
+                                   leave=False):
+                batch_end = min(batch_start + batch_size, len(visible_indices))
+                batch_indices = visible_indices[batch_start:batch_end]
+                
+                # Extract patches for this batch
+                batch_patches = []
+                for idx in batch_indices:
+                    x, y = pts_2d[idx]
+                    patch = process_patch(imgs[i], x, y, half_patch_size)
+                    batch_patches.append(patch)
+                
+                # Stack patches and move to device
+                if batch_patches:
+                    stacked_patches = torch.stack(batch_patches).to(device)
+                    
+                    # Process in sub-batches if needed to avoid OOM errors
+                    sub_batch_size = min(128, len(stacked_patches))  # Adjust based on GPU memory
+                    for sub_start in range(0, len(stacked_patches), sub_batch_size):
+                        sub_end = min(sub_start + sub_batch_size, len(stacked_patches))
+                        sub_patches = stacked_patches[sub_start:sub_end]
+                        
+                        # Get features in a single forward pass
+                        sub_features = model.encode_image(sub_patches)
+                        
+                        # Assign features to the correct indices
+                        for j, feat_idx in enumerate(range(sub_start, sub_end)):
+                            pt_idx = batch_indices[feat_idx]
+                            patch_features[i, pt_idx] = sub_features[j]
 
     if debug_mode:
         elapsed_time = time.time() - start_time
@@ -192,6 +298,10 @@ def process_scene(args, scene_dir, model, preprocess_fn):
         debug_dir = os.path.join(scene_dir, 'debug')
         os.makedirs(debug_dir, exist_ok=True)
         logging.info(f"Debug outputs will be saved to: {debug_dir}")
+        
+    # Clear CUDA cache before processing each scene
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
 
     if debug_mode:
         logging.info("Loading point cloud...")
@@ -248,7 +358,8 @@ def process_scene(args, scene_dir, model, preprocess_fn):
         patch_features, is_visible = get_patch_features(pts, imgs, depths, w2cs, K, 
                                                         model, preprocess_fn, 
                                                         occ_thr, patch_size=args.patch_size, batch_size=args.batch_size, 
-                                                        device=args.device, debug_dir=debug_dir, debug_mode=debug_mode)
+                                                        device=args.device, debug_dir=debug_dir, debug_mode=debug_mode,
+                                                        num_workers=args.num_workers)
         
     out_dir = os.path.join(scene_dir, 'features')
     os.makedirs(out_dir, exist_ok=True)
