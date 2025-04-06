@@ -4,7 +4,7 @@
 #SBATCH --error=/n/fs/scratch/%u/nerf2physics/logs/%x_%j.err
 #SBATCH --partition=pvl
 #SBATCH --account=pvl
-#SBATCH --time=4:00:00
+#SBATCH --time=12:00:00
 #SBATCH --mem=32G
 #SBATCH --cpus-per-task=4
 #SBATCH --gres=gpu:1
