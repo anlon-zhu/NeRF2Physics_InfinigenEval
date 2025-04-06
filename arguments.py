@@ -113,6 +113,8 @@ def get_args():
                         help='maximum physical property value for colormap (default: 3500)')
     parser.add_argument('--viz_save_name', type=str, default="tmp",
                         help='visualization save name (default: tmp)')
+    parser.add_argument('--debug', action='store_true',
+                        help='enable debug mode with additional logging and visualizations')
 
     args = parser.parse_args()
 
