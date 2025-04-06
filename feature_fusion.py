@@ -104,10 +104,14 @@ if __name__ == '__main__':
 
     scenes_dir = os.path.join(args.data_dir, 'scenes')
     scenes = get_scenes_list(args)
+    
+    if args.scene_name is not None:
+        scenes = [args.scene_name]
 
     model, _, preprocess = open_clip.create_model_and_transforms(CLIP_BACKBONE, pretrained=CLIP_CHECKPOINT)
     model.to(args.device)
 
     for j, scene in enumerate(scenes):
         pts, patch_features, is_visible = process_scene(args, os.path.join(scenes_dir, scene), model, preprocess)
+        print(f"Scene {scene} processed.")
 
