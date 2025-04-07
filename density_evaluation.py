@@ -505,57 +505,55 @@ def run_density_evaluation(args):
         with open(os.path.join(output_dir, 'density_metrics_avg.json'), 'w') as f:
             json.dump(avg_metrics, f, indent=4)
         
-        # Generate histograms for each evaluation metric across all views and scenes
-        if args.all_metrics:
-            # Extract metrics for histogram generation
-            metrics_by_type = {}
-            for metric_type in ['ADE', 'ALDE', 'APE', 'MnRE']:
-                metrics_by_type[metric_type] = [metrics[metric_type] for metrics in all_metrics.values()]
+        # Extract metrics for histogram generation
+        metrics_by_type = {}
+        for metric_type in ['ADE', 'ALDE', 'APE', 'MnRE']:
+            metrics_by_type[metric_type] = [metrics[metric_type] for metrics in all_metrics.values()]
+        
+        # Create histograms for each metric type across all views
+        plt.figure(figsize=(15, 10))
+        for i, (metric_name, values) in enumerate(metrics_by_type.items(), 1):
+            plt.subplot(2, 2, i)
+            plt.hist(values, bins=10, alpha=0.7)
+            plt.title(f'{metric_name} Distribution Across All Views')
+            plt.xlabel(metric_name)
+            plt.ylabel('Frequency')
+            plt.axvline(np.mean(values), color='r', linestyle='dashed', linewidth=1, label=f'Mean: {np.mean(values):.4f}')
+            plt.legend()
+        
+        plt.tight_layout()
+        plt.savefig(os.path.join(output_dir, 'metrics_histograms_all_views.png'))
+        plt.close()
+        
+        # If we have multiple scenes, generate histograms for metrics averaged across views per scene
+        # For a single scene, this is the same as the average metrics
+        if len(args.scene_name.split(',')) > 1:
+            # Group metrics by scene
+            scene_metrics = {}
+            for scene_name in args.scene_name.split(','):
+                scene_metrics[scene_name] = {}
+                for metric_type in ['ADE', 'ALDE', 'APE', 'MnRE']:
+                    scene_views = [v for k, v in all_metrics.items() if scene_name in k]
+                    if scene_views:
+                        scene_metrics[scene_name][metric_type] = np.mean([v[metric_type] for v in scene_views])
             
-            # Create histograms for each metric type across all views
+            # Create histograms for each metric type across scenes (averaged across views)
             plt.figure(figsize=(15, 10))
-            for i, (metric_name, values) in enumerate(metrics_by_type.items(), 1):
-                plt.subplot(2, 2, i)
-                plt.hist(values, bins=10, alpha=0.7)
-                plt.title(f'{metric_name} Distribution Across All Views')
-                plt.xlabel(metric_name)
-                plt.ylabel('Frequency')
-                plt.axvline(np.mean(values), color='r', linestyle='dashed', linewidth=1, label=f'Mean: {np.mean(values):.4f}')
-                plt.legend()
+            for i, metric_name in enumerate(['ADE', 'ALDE', 'APE', 'MnRE'], 1):
+                values = [metrics[metric_name] for metrics in scene_metrics.values() if metric_name in metrics]
+                if values:
+                    plt.subplot(2, 2, i)
+                    plt.bar(list(scene_metrics.keys()), values, alpha=0.7)
+                    plt.title(f'Average {metric_name} Across Scenes')
+                    plt.xlabel('Scene')
+                    plt.ylabel(metric_name)
+                    plt.xticks(rotation=45, ha='right')
+                    plt.axhline(np.mean(values), color='r', linestyle='dashed', linewidth=1, label=f'Mean: {np.mean(values):.4f}')
+                    plt.legend()
             
             plt.tight_layout()
-            plt.savefig(os.path.join(output_dir, 'metrics_histograms_all_views.png'))
+            plt.savefig(os.path.join(output_dir, 'metrics_histograms_by_scene.png'))
             plt.close()
-            
-            # If we have multiple scenes, generate histograms for metrics averaged across views per scene
-            # For a single scene, this is the same as the average metrics
-            if len(args.scene_name.split(',')) > 1:
-                # Group metrics by scene
-                scene_metrics = {}
-                for scene_name in args.scene_name.split(','):
-                    scene_metrics[scene_name] = {}
-                    for metric_type in ['ADE', 'ALDE', 'APE', 'MnRE']:
-                        scene_views = [v for k, v in all_metrics.items() if scene_name in k]
-                        if scene_views:
-                            scene_metrics[scene_name][metric_type] = np.mean([v[metric_type] for v in scene_views])
-                
-                # Create histograms for each metric type across scenes (averaged across views)
-                plt.figure(figsize=(15, 10))
-                for i, metric_name in enumerate(['ADE', 'ALDE', 'APE', 'MnRE'], 1):
-                    values = [metrics[metric_name] for metrics in scene_metrics.values() if metric_name in metrics]
-                    if values:
-                        plt.subplot(2, 2, i)
-                        plt.bar(list(scene_metrics.keys()), values, alpha=0.7)
-                        plt.title(f'Average {metric_name} Across Scenes')
-                        plt.xlabel('Scene')
-                        plt.ylabel(metric_name)
-                        plt.xticks(rotation=45, ha='right')
-                        plt.axhline(np.mean(values), color='r', linestyle='dashed', linewidth=1, label=f'Mean: {np.mean(values):.4f}')
-                        plt.legend()
-                
-                plt.tight_layout()
-                plt.savefig(os.path.join(output_dir, 'metrics_histograms_by_scene.png'))
-                plt.close()
     
     print(f"Density evaluation complete. Results saved to {output_dir}")
 
