@@ -1,9 +1,3 @@
-"""
-Density Visualization for NeRF2Physics
-Creates the requested plots and tables for the density evaluation results
-across multiple scenes and views.
-"""
-
 import os
 import json
 import numpy as np
@@ -15,525 +9,179 @@ from matplotlib.colors import Normalize
 from argparse import ArgumentParser
 from tqdm import tqdm
 
-# Import our configuration
+# Configuration
 from density_config import PathConfig, VisualizationConfig
 
+##########################################
+# Utility Functions
+##########################################
 
-def load_metrics_for_scene(scene_dir):
-    """Load metrics for a scene from its density_metrics_avg.json file."""
+def load_metrics(scene_dir, averaged=True):
+    """Load metrics from density_metrics_avg.json or density_metrics.json."""
     output_dir = PathConfig.get_evaluation_output_dir(scene_dir)
-    metrics_path = PathConfig.get_avg_metrics_file(output_dir)
-    if not os.path.exists(metrics_path):
-        return None
-    
-    with open(metrics_path, 'r') as f:
-        metrics = json.load(f)
-    
-    return metrics
-
-
-def load_view_metrics_for_scene(scene_dir):
-    """Load per-view metrics for a scene from its density_metrics.json file."""
-    output_dir = PathConfig.get_evaluation_output_dir(scene_dir)
-    metrics_path = PathConfig.get_metrics_file(output_dir)
-    if not os.path.exists(metrics_path):
-        return None
-    
-    with open(metrics_path, 'r') as f:
-        metrics = json.load(f)
-    
-    return metrics
-
-
-def load_density_map(scene_dir, view_idx=0):
-    """Load a density map for a specific view of a scene."""
-    output_dir = PathConfig.get_evaluation_output_dir(scene_dir)
-    density_path = PathConfig.get_predicted_density_map_file(output_dir, view_idx, 'npy')
-    if not os.path.exists(density_path):
-        return None
-    
-    density_map = np.load(density_path)
-    return density_map
-
-
-def load_gt_density_map(scene_dir, view_idx=0):
-    """Load a ground truth density map for a specific view of a scene."""
-    gt_density_dir = PathConfig.get_gt_density_dir(scene_dir)
-    if not os.path.exists(gt_density_dir):
-        return None
-    
-    # Try to find the ground truth file using PathConfig
-    gt_file = PathConfig.get_gt_density_file(gt_density_dir, view_idx)
-    if gt_file and os.path.exists(gt_file) and gt_file.endswith('.npy'):
-        gt_data = np.load(gt_file)
-        return gt_data
-    
+    metrics_path = (PathConfig.get_avg_metrics_file(output_dir)
+                    if averaged else PathConfig.get_metrics_file(output_dir))
+    if os.path.exists(metrics_path):
+        with open(metrics_path, 'r') as f:
+            return json.load(f)
     return None
 
+def load_density_map(scene_dir, view_idx, ground_truth=False):
+    """Load predicted or GT density map for a given view."""
+    if ground_truth:
+        gt_dir = PathConfig.get_gt_density_dir(scene_dir)
+        gt_file = PathConfig.get_gt_density_file(gt_dir, view_idx)
+        if gt_file and os.path.exists(gt_file) and gt_file.endswith('.npy'):
+            return np.load(gt_file)
+    else:
+        output_dir = PathConfig.get_evaluation_output_dir(scene_dir)
+        pred_file = PathConfig.get_predicted_density_map_file(output_dir, view_idx, 'npy')
+        if os.path.exists(pred_file):
+            return np.load(pred_file)
+    return None
 
-def create_aggregate_metrics_table(scene_metrics):
-    """
-    Create Table 1: Aggregate Evaluation Metrics Summary
-    """
-    # Extract metrics into arrays
-    ade_values = [m.get('ADE', 0) for m in scene_metrics.values() if m is not None]
-    alde_values = [m.get('ALDE', 0) for m in scene_metrics.values() if m is not None]
-    med_ade_values = [m.get('MedADE', 0) for m in scene_metrics.values() if m is not None]
-    mnre_values = [m.get('MnRE', 0) for m in scene_metrics.values() if m is not None]
-    
-    # Create DataFrame for the table
+def compute_global_range(maps, low=5, high=95):
+    """Compute percentile-based min/max for colormaps."""
+    values = np.concatenate([m.flatten() for m in maps])
+    values = values[(values > 0) & (values != -1)]
+    if values.size > 0:
+        return np.percentile(values, low), np.percentile(values, high)
+    return 0, 1
+
+##########################################
+# Visualization Functions
+##########################################
+
+def create_metrics_summary(scene_metrics):
+    """Create Table 1: Aggregate Metrics Summary."""
+    metrics = ['ADE', 'ALDE', 'MedADE', 'MnRE']
     data = {
-        'Metric': ['ADE', 'ALDE', 'MedADE', 'MnRE'],
-        'Aggregate (All Scenes)': [
-            np.mean(ade_values),
-            np.mean(alde_values),
-            np.median(med_ade_values),
-            np.mean(mnre_values)
-        ],
-        'Spread (All Scenes)': [
-            np.std(ade_values),
-            np.std(alde_values),
-            np.iqr(med_ade_values),
-            np.std(mnre_values)
-        ]
+        'Metric': metrics,
+        'Aggregate (All Scenes)': [],
+        'Spread (All Scenes)': []
     }
-    
-    df = pd.DataFrame(data)
-    
-    # Format the table for display
-    df['Aggregate (All Scenes)'] = df['Aggregate (All Scenes)'].map(lambda x: f"{x:.2f}")
-    df['Spread (All Scenes)'] = df['Spread (All Scenes)'].map(lambda x: f"{x:.2f}")
 
-    # Save as CSV
+    for m in metrics:
+        vals = [s.get(m, 0) for s in scene_metrics.values() if s is not None]
+        agg = np.median(vals) if m == 'MedADE' else np.mean(vals)
+        spread = np.iqr(vals) if m == 'MedADE' else np.std(vals)
+        data['Aggregate (All Scenes)'].append(f"{agg:.2f}")
+        data['Spread (All Scenes)'].append(f"{spread:.2f}")
+
+    df = pd.DataFrame(data)
     df.to_csv('metrics_summary_table.csv', index=False)
-    
-    # Generate LaTeX table
-    latex_table = df.to_latex(index=False, escape=False)
     with open('metrics_summary_table.tex', 'w') as f:
-        f.write(latex_table)
-    
-    print(f"Table 1 created and saved as metrics_summary_table.csv and metrics_summary_table.tex")
-    
+        f.write(df.to_latex(index=False, escape=False))
+    print("[INFO] Table 1 saved as CSV and LaTeX")
     return df
 
-
-def create_metrics_distribution_plot(scene_metrics):
-    """
-    Create Figure 1: Distribution of Evaluation Metrics Across Scenes
-    """
-    # Convert metrics dictionary to DataFrame suitable for seaborn
-    metrics_data = []
-    for scene_id, metrics in scene_metrics.items():
-        if metrics is None:
-            continue
-        
-        for metric_name, value in metrics.items():
-            metrics_data.append({
-                'Scene': scene_id,
-                'Metric': metric_name,
-                'Value': value
-            })
-    
-    df = pd.DataFrame(metrics_data)
-    
-    # Create violin plot with box plot inside
+def create_metrics_violinplot(scene_metrics):
+    """Figure 1: Violin distribution of all metrics."""
+    rows = []
+    for sid, metrics in scene_metrics.items():
+        if metrics:
+            for k, v in metrics.items():
+                rows.append({'Scene': sid, 'Metric': k, 'Value': v})
+    df = pd.DataFrame(rows)
     plt.figure(figsize=(12, 8))
     sns.violinplot(x='Metric', y='Value', data=df, inner='box', palette='viridis')
-    
-    # Customize plot
-    plt.title('Distribution of Evaluation Metrics Across All Scenes', fontsize=16)
-    plt.xlabel('Metric Type', fontsize=14)
-    plt.ylabel('Value', fontsize=14)
-    plt.grid(axis='y', linestyle='--', alpha=0.7)
-    
-    # Save figure
-    plt.tight_layout()
+    plt.title('Distribution of Evaluation Metrics Across All Scenes')
     plt.savefig(VisualizationConfig.METRICS_DIST_FILENAME, dpi=300)
     plt.close()
-    
-    print(f"Figure 1 created and saved as {VisualizationConfig.METRICS_DIST_FILENAME}")
+    print(f"[INFO] Figure 1 saved as {VisualizationConfig.METRICS_DIST_FILENAME}")
 
-
-def create_scenewise_ade_plot(scene_metrics):
-    """
-    Create Figure 2: Scene-wise ADE (Sorted)
-    """
-    # Extract ADE values with scene IDs
-    ade_values = []
-    for scene_id, metrics in scene_metrics.items():
-        if metrics is not None and 'ADE' in metrics:
-            scene_num = os.path.basename(scene_id).replace('scene_', '')
-            ade_values.append((scene_num, metrics['ADE']))
-    
-    # Sort by ADE value
-    sorted_ade = sorted(ade_values, key=lambda x: x[1])
-    scene_ids = [x[0] for x in sorted_ade]
-    ade_vals = [x[1] for x in sorted_ade]
-    
-    # Create bar plot
+def create_scenewise_bar(scene_metrics, metric='ADE', filename='scenewise_ADE.png'):
+    """Figure 2: Bar plot of scene-wise ADE."""
+    data = [(os.path.basename(k).replace('scene_', ''), v[metric])
+            for k, v in scene_metrics.items() if v and metric in v]
+    data.sort(key=lambda x: x[1])
+    scene_ids, values = zip(*data)
     plt.figure(figsize=(15, 6))
-    bars = plt.bar(range(len(ade_vals)), ade_vals, color=plt.cm.viridis(np.linspace(0, 1, len(ade_vals))))
-    
-    # Customize plot
-    plt.title('Scene-wise Average Density Error (ADE) - Sorted', fontsize=16)
-    plt.xlabel('Scene ID (sorted by ADE)', fontsize=14)
-    plt.ylabel('ADE', fontsize=14)
-    plt.xticks(range(0, len(scene_ids), max(1, len(scene_ids)//10)), 
-               [scene_ids[i] for i in range(0, len(scene_ids), max(1, len(scene_ids)//10))], 
+    plt.bar(range(len(values)), values, color=plt.cm.viridis(np.linspace(0, 1, len(values))))
+    plt.xticks(range(0, len(values), max(1, len(values)//10)), 
+               [scene_ids[i] for i in range(0, len(values), max(1, len(values)//10))], 
                rotation=45)
-    plt.grid(axis='y', linestyle='--', alpha=0.7)
-    
-    # Save figure
+    plt.title(f'Scene-wise {metric} (Sorted)')
+    plt.ylabel(metric)
+    plt.grid(axis='y')
     plt.tight_layout()
-    plt.savefig(VisualizationConfig.SCENEWISE_ADE_FILENAME, dpi=300)
+    plt.savefig(filename, dpi=300)
     plt.close()
-    
-    print(f"Figure 2 created and saved as {VisualizationConfig.SCENEWISE_ADE_FILENAME}")
+    print(f"[INFO] Scene-wise {metric} saved as {filename}")
 
-
-def create_grid_diff_density(scene_dirs, view_idx=0, grid_size=None):
-    # Use default grid size from config if not specified
-    if grid_size is None:
-        grid_size = VisualizationConfig.GRID_SIZE
-    """
-    Create Figure 3: 10x10 Grid - Pixel-Level Density Difference
-    """
+def create_grid_image(scene_dirs, view_idx, mode, cmap, filename, label, grid_size):
     rows, cols = grid_size
-    max_scenes = rows * cols
-    valid_scenes = []
-    
-    # First pass to identify valid scenes and determine global colormap scale
-    diff_maps = []
-    print("Finding valid scenes for difference grid...")
-    for scene_dir in tqdm(scene_dirs[:max_scenes*2]):  # Check more scenes than needed to ensure we get enough valid ones
-        if len(valid_scenes) >= max_scenes:
+    max_items = rows * cols
+    images, labels = [], []
+    for d in scene_dirs:
+        pred = load_density_map(d, view_idx)
+        gt = load_density_map(d, view_idx, ground_truth=True)
+        if pred is not None:
+            if mode == 'pred':
+                images.append(pred)
+                labels.append(os.path.basename(d))
+            elif mode == 'diff' and gt is not None and pred.shape == gt.shape:
+                diff = np.abs(pred - gt)
+                diff[gt == -1] = 0
+                images.append(diff)
+                labels.append(os.path.basename(d))
+            elif mode == 'mask':
+                mask = (pred > 0).astype(np.float32)
+                images.append(mask)
+                labels.append(os.path.basename(d))
+        if len(images) >= max_items:
             break
-            
-        pred_density = load_density_map(scene_dir, view_idx)
-        gt_density = load_gt_density_map(scene_dir, view_idx)
-        
-        if pred_density is not None and gt_density is not None:
-            # Make sure shapes match
-            if pred_density.shape == gt_density.shape:
-                # Calculate absolute difference
-                abs_diff = np.abs(pred_density - gt_density)
-                
-                # Set -1 values in GT (missing data) to 0 in diff
-                if np.any(gt_density == -1):
-                    abs_diff[gt_density == -1] = 0
-                
-                diff_maps.append(abs_diff)
-                valid_scenes.append(scene_dir)
-    
-    if len(valid_scenes) < max_scenes:
-        print(f"Warning: Only {len(valid_scenes)} valid scenes found for grid visualization.")
-    
-    # Determine global min/max for consistent colormap
-    all_diffs = np.concatenate([diff.flatten() for diff in diff_maps])
-    all_diffs = all_diffs[all_diffs > 0]  # Exclude zeros for better scaling
-    if len(all_diffs) > 0:
-        vmin = np.percentile(all_diffs, 5)  # Use 5th percentile to avoid outliers
-        vmax = np.percentile(all_diffs, 95)  # Use 95th percentile to avoid outliers
-    else:
-        vmin, vmax = 0, 1
-    
-    # Create the grid visualization
+
+    vmin, vmax = compute_global_range(images)
     fig, axes = plt.subplots(rows, cols, figsize=(20, 20))
-    axes = axes.flatten()
-    
-    print("Creating difference grid visualization...")
-    for i, (scene_dir, diff_map) in enumerate(zip(valid_scenes[:max_scenes], diff_maps[:max_scenes])):
-        scene_id = os.path.basename(scene_dir)
-        ax = axes[i]
-        
-        # Display the difference map
-        im = ax.imshow(diff_map, cmap=VisualizationConfig.DIFF_COLORMAP, vmin=vmin, vmax=vmax)
-        ax.set_title(scene_id, fontsize=8)
+    for ax, img, title in zip(axes.flatten(), images, labels):
+        im = ax.imshow(img, cmap=cmap, vmin=vmin, vmax=vmax)
+        ax.set_title(title, fontsize=8)
         ax.axis('off')
-    
-    # Hide unused subplots
-    for i in range(len(valid_scenes), max_scenes):
-        axes[i].axis('off')
-    
-    # Add colorbar
+    for ax in axes.flatten()[len(images):]:
+        ax.axis('off')
     fig.subplots_adjust(right=0.9)
     cbar_ax = fig.add_axes([0.92, 0.15, 0.02, 0.7])
-    cbar = fig.colorbar(im, cax=cbar_ax)
-    cbar.set_label('Absolute Difference in Density (kg/m³)')
-    
-    # Set title for the entire figure
-    plt.suptitle(f'Absolute Density Difference (|Prediction - Ground Truth|) - View {view_idx}', 
-                 fontsize=16, y=0.98)
-    
-    # Save figure
-    plt.savefig(f'grid_diff_density_view{view_idx}.png', dpi=300, bbox_inches='tight')
+    fig.colorbar(im, cax=cbar_ax, label=label)
+    plt.suptitle(filename.replace('.png', '').replace('_', ' ').title())
+    plt.savefig(filename, dpi=300, bbox_inches='tight')
     plt.close()
-    
-    print(f"Figure 3 created and saved as grid_diff_density_view{view_idx}.png")
+    print(f"[INFO] Grid saved as {filename}")
 
-
-def create_grid_pred_density(scene_dirs, view_idx=0, grid_size=(10, 10)):
-    """
-    Create Figure 4: 10x10 Grid - Raw Predicted Densities
-    """
-    rows, cols = grid_size
-    max_scenes = rows * cols
-    valid_scenes = []
-    
-    # First pass to identify valid scenes and determine global colormap scale
-    density_maps = []
-    print("Finding valid scenes for predicted density grid...")
-    for scene_dir in tqdm(scene_dirs[:max_scenes*2]):  # Check more scenes than needed to ensure we get enough valid ones
-        if len(valid_scenes) >= max_scenes:
-            break
-            
-        pred_density = load_density_map(scene_dir, view_idx)
-        
-        if pred_density is not None:
-            density_maps.append(pred_density)
-            valid_scenes.append(scene_dir)
-    
-    if len(valid_scenes) < max_scenes:
-        print(f"Warning: Only {len(valid_scenes)} valid scenes found for grid visualization.")
-    
-    # Determine global min/max for consistent colormap
-    all_densities = np.concatenate([density.flatten() for density in density_maps])
-    all_densities = all_densities[all_densities > 0]  # Exclude zeros for better scaling
-    if len(all_densities) > 0:
-        vmin = 0  # Always start at 0 for density
-        vmax = np.percentile(all_densities, 95)  # Use 95th percentile to avoid outliers
-    else:
-        vmin, vmax = 0, 3000  # Default range
-    
-    # Create the grid visualization
-    fig, axes = plt.subplots(rows, cols, figsize=(20, 20))
-    axes = axes.flatten()
-    
-    print("Creating predicted density grid visualization...")
-    for i, (scene_dir, density_map) in enumerate(zip(valid_scenes[:max_scenes], density_maps[:max_scenes])):
-        scene_id = os.path.basename(scene_dir)
-        ax = axes[i]
-        
-        # Display the density map
-        im = ax.imshow(density_map, cmap='viridis', vmin=vmin, vmax=vmax)
-        ax.set_title(scene_id, fontsize=8)
-        ax.axis('off')
-    
-    # Hide unused subplots
-    for i in range(len(valid_scenes), max_scenes):
-        axes[i].axis('off')
-    
-    # Add colorbar
-    fig.subplots_adjust(right=0.9)
-    cbar_ax = fig.add_axes([0.92, 0.15, 0.02, 0.7])
-    cbar = fig.colorbar(im, cax=cbar_ax)
-    cbar.set_label('Predicted Density (kg/m³)')
-    
-    # Set title for the entire figure
-    plt.suptitle(f'Predicted Density Maps - View {view_idx}', fontsize=16, y=0.98)
-    
-    # Save figure
-    plt.savefig(f'grid_pred_density_view{view_idx}.png', dpi=300, bbox_inches='tight')
-    plt.close()
-    
-    print(f"Figure 4 created and saved as grid_pred_density_view{view_idx}.png")
-
-
-def create_grid_valid_mask(scene_dirs, view_idx=0, grid_size=(10, 10)):
-    """
-    Create Figure 5: 10x10 Grid - Valid Prediction Masks
-    """
-    rows, cols = grid_size
-    max_scenes = rows * cols
-    valid_scenes = []
-    
-    # First pass to identify valid scenes
-    mask_maps = []
-    print("Finding valid scenes for prediction mask grid...")
-    for scene_dir in tqdm(scene_dirs[:max_scenes*2]):  # Check more scenes than needed to ensure we get enough valid ones
-        if len(valid_scenes) >= max_scenes:
-            break
-            
-        pred_density = load_density_map(scene_dir, view_idx)
-        
-        if pred_density is not None:
-            # Create binary mask where prediction exists
-            mask = (pred_density > 0).astype(np.float32)
-            mask_maps.append(mask)
-            valid_scenes.append(scene_dir)
-    
-    if len(valid_scenes) < max_scenes:
-        print(f"Warning: Only {len(valid_scenes)} valid scenes found for grid visualization.")
-    
-    # Create the grid visualization
-    fig, axes = plt.subplots(rows, cols, figsize=(20, 20))
-    axes = axes.flatten()
-    
-    print("Creating valid prediction mask grid visualization...")
-    for i, (scene_dir, mask) in enumerate(zip(valid_scenes[:max_scenes], mask_maps[:max_scenes])):
-        scene_id = os.path.basename(scene_dir)
-        ax = axes[i]
-        
-        # Display the binary mask (white = valid prediction, black = no prediction)
-        im = ax.imshow(mask, cmap='binary', vmin=0, vmax=1)
-        ax.set_title(scene_id, fontsize=8)
-        ax.axis('off')
-    
-    # Hide unused subplots
-    for i in range(len(valid_scenes), max_scenes):
-        axes[i].axis('off')
-    
-    # Set title for the entire figure
-    plt.suptitle(f'Valid Prediction Masks - View {view_idx}', fontsize=16, y=0.98)
-    
-    # Save figure
-    plt.savefig(f'grid_valid_mask_view{view_idx}.png', dpi=300, bbox_inches='tight')
-    plt.close()
-    
-    print(f"Figure 5 created and saved as grid_valid_mask_view{view_idx}.png")
-
-
-def create_multiview_scene_analysis(scene_dir, views=None):
-    """
-    Create Figure 6: Case Study - Multi-View Scene Analysis
-    Compare predicted and ground truth density maps over multiple views for one selected scene.
-    """
-    if views is None:
-        views = list(range(0, 30, 3))[:9]  # Views 0, 3, 6, ..., 27 (9 total)
-    
-    scene_id = os.path.basename(scene_dir)
-    valid_views = []
-    pred_maps = []
-    gt_maps = []
-    
-    # Find views that have both prediction and ground truth
-    for view_idx in views:
-        pred_density = load_density_map(scene_dir, view_idx)
-        gt_density = load_gt_density_map(scene_dir, view_idx)
-        
-        if pred_density is not None and gt_density is not None:
-            # Make sure shapes match
-            if pred_density.shape == gt_density.shape:
-                valid_views.append(view_idx)
-                pred_maps.append(pred_density)
-                gt_maps.append(gt_density)
-    
-    if not valid_views:
-        print(f"Warning: No valid views found for multi-view analysis of {scene_id}")
-        return
-    
-    # Determine global colormap scale for consistent visualization
-    all_densities = np.concatenate([pred.flatten() for pred in pred_maps] + [gt.flatten() for gt in gt_maps])
-    valid_densities = all_densities[(all_densities > 0) & (all_densities != -1)]  # Exclude zeros and -1 values
-    if len(valid_densities) > 0:
-        vmin = 0  # Always start at 0 for density
-        vmax = np.percentile(valid_densities, 95)  # Use 95th percentile to avoid outliers
-    else:
-        vmin, vmax = 0, 3000  # Default range
-    
-    # Create a grid of subplots for the comparison
-    n_views = len(valid_views)
-    if n_views == 0:
-        print(f"Error: No valid views available for {scene_id}")
-        return
-    
-    # Create a figure with side-by-side comparisons for each view
-    fig, axes = plt.subplots(n_views, 2, figsize=(12, 3*n_views))
-    if n_views == 1:
-        axes = axes.reshape(1, -1)  # Ensure 2D array for consistent indexing
-    
-    norm = Normalize(vmin=vmin, vmax=vmax)
-    
-    for i, (view_idx, pred, gt) in enumerate(zip(valid_views, pred_maps, gt_maps)):
-        # Left: predicted density
-        im_pred = axes[i, 0].imshow(pred, cmap='viridis', norm=norm)
-        axes[i, 0].set_title(f'View {view_idx} - Predicted')
-        axes[i, 0].axis('off')
-        
-        # Right: ground truth
-        invalid_mask = gt == -1
-        gt_display = gt.copy()
-        # Replace -1 values with NaN for display (will appear transparent)
-        if np.any(invalid_mask):
-            gt_display[invalid_mask] = np.nan
-        
-        im_gt = axes[i, 1].imshow(gt_display, cmap='viridis', norm=norm)
-        axes[i, 1].set_title(f'View {view_idx} - Ground Truth')
-        axes[i, 1].axis('off')
-    
-    # Add a colorbar for the entire figure
-    fig.subplots_adjust(right=0.9)
-    cbar_ax = fig.add_axes([0.92, 0.15, 0.02, 0.7])
-    cbar = fig.colorbar(im_pred, cax=cbar_ax)
-    cbar.set_label('Density (kg/m³)')
-    
-    # Set a title for the entire figure
-    plt.suptitle(f'Multi-View Comparison: {scene_id}', fontsize=16, y=0.98)
-    
-    # Save figure
-    plt.savefig(f'{scene_id}_multiview_comparison.png', dpi=300, bbox_inches='tight')
-    plt.close()
-    
-    print(f"Figure 6 created and saved as {scene_id}_multiview_comparison.png")
-
+##########################################
+# Main
+##########################################
 
 def main():
-    # Parse command-line arguments
-    parser = ArgumentParser(description="Generate density evaluation plots and tables")
-    parser.add_argument('--data_dir', type=str, required=True,
-                        help='Path to the data directory containing scene folders')
-    parser.add_argument('--output_dir', type=str, default='.',
-                        help='Directory to save output plots and tables')
-    parser.add_argument('--case_study_scene', type=str, default='scene_42',
-                        help='Scene to use for the multi-view case study')
-    parser.add_argument('--view_idx', type=int, default=0,
-                        help='View index to use for grid visualizations')
-    
+    parser = ArgumentParser()
+    parser.add_argument('--data_dir', type=str, required=True)
+    parser.add_argument('--output_dir', type=str, default='.')
+    parser.add_argument('--case_study_scene', type=str, default='scene_42')
+    parser.add_argument('--view_idx', type=int, default=0)
     args = parser.parse_args()
-    
-    # Create output directory if it doesn't exist
+
     os.makedirs(args.output_dir, exist_ok=True)
-    os.chdir(args.output_dir)  # Change to output directory
-    
-    # Get all scene directories
-    scenes_dir = os.path.join(args.data_dir, 'scenes')
-    scene_dirs = glob(os.path.join(scenes_dir, 'scene_*'))
-    scene_dirs.sort()
-    
-    print(f"Found {len(scene_dirs)} scene directories")
-    
-    # Load metrics for all scenes
-    scene_metrics = {}
-    print("Loading scene metrics...")
-    for scene_dir in tqdm(scene_dirs):
-        scene_id = os.path.basename(scene_dir)
-        metrics = load_metrics_for_scene(scene_dir)
-        scene_metrics[scene_dir] = metrics
-    
-    # Create Table 1: Aggregate Evaluation Metrics Summary
-    create_aggregate_metrics_table(scene_metrics)
-    
-    # Create Figure 1: Distribution of Evaluation Metrics Across Scenes
-    create_metrics_distribution_plot(scene_metrics)
-    
-    # Create Figure 2: Scene-wise ADE (Sorted)
-    create_scenewise_ade_plot(scene_metrics)
+    os.chdir(args.output_dir)
 
-    # Create Figure 2.5: Scene-wise MedADE (Sorted)
-    # TODO: implement create_scenewise_med_ade_plot(scene_metrics)
-    
-    # Create Figure 3: 10x10 Grid – Pixel-Level Density Difference
-    # TODO: do contextualized difference as in density_evaluation.py
-    create_grid_diff_density(scene_dirs, view_idx=args.view_idx)
-    
-    # Create Figure 4: 10x10 Grid – Raw Predicted Densities
-    create_grid_pred_density(scene_dirs, view_idx=args.view_idx)
-    
-    # Create Figure 5: 10x10 Grid – Valid Prediction Masks
-    create_grid_valid_mask(scene_dirs, view_idx=args.view_idx)
-    
-    print("All plots and tables generated successfully!")
+    scenes_dir = PathConfig.get_scenes_dir(args.data_dir)
+    scene_dirs = sorted(glob(os.path.join(scenes_dir, 'scene_*')))
 
+    print(f"[INFO] Found {len(scene_dirs)} scenes")
+    scene_metrics = {d: load_metrics(d) for d in tqdm(scene_dirs)}
+
+    create_metrics_summary(scene_metrics)
+    create_metrics_violinplot(scene_metrics)
+    create_scenewise_bar(scene_metrics, metric='ADE')
+    create_scenewise_bar(scene_metrics, metric='MedADE')
+
+    create_grid_image(scene_dirs, args.view_idx, mode='diff', cmap=VisualizationConfig.DIFF_COLORMAP,
+                      filename='grid_diff_density.png', label='|Prediction - GT|', grid_size=VisualizationConfig.GRID_SIZE)
+    create_grid_image(scene_dirs, args.view_idx, mode='pred', cmap='viridis',
+                      filename='grid_pred_density.png', label='Predicted Density (kg/m³)', grid_size=VisualizationConfig.GRID_SIZE)
+    create_grid_image(scene_dirs, args.view_idx, mode='mask', cmap='binary',
+                      filename='grid_valid_mask.png', label='Valid Prediction Mask', grid_size=VisualizationConfig.GRID_SIZE)
+
+    print("[INFO] All aggregate visualizations generated successfully.")
 
 if __name__ == '__main__':
     main()

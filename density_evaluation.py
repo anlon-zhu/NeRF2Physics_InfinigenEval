@@ -277,8 +277,10 @@ def create_contextual_difference_grid(common_views, output_dir):
         ax.axis('off')
 
         # Gray GT background with low alpha
+
         gray_gt = plt.cm.gray(gt)
-        gray_gt[..., 3] = 0.2
+        gray_gt[..., 3] = 0.3
+        gray_gt[pred > 0] = np.nan
         ax.imshow(gray_gt)
 
         # Overlay the diff heatmap
