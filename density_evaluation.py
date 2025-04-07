@@ -233,52 +233,64 @@ def create_grid_visualization(rendered_data, output_dir, cmap_min, cmap_max):
     plt.close()
 
 
-def create_comparison_grid(gt_data_list, predicted_density_list, output_dir, cmap_min, cmap_max):
+def create_contextual_difference_grid(common_views, output_dir, cmap_min, cmap_max):
     """
-    Create a grid comparing predicted (top) and ground truth (bottom) density images.
-    Returns a list of common views as tuples: (view_idx, predicted, gt)
+    Create a 3x3 grid showing predicted - GT difference maps, overlayed on the GT
+    as a dimmed background for context. Only displays valid pixels.
     """
-    # Create dictionaries for quick lookup
-    gt_dict = {view_idx: gt for view_idx, gt in gt_data_list}
-    pred_dict = {view_idx: pred for view_idx, pred in predicted_density_list}
-    common_views = [(view_idx, pred_dict[view_idx], gt_dict[view_idx])
-                    for view_idx in sorted(set(gt_dict.keys()) & set(pred_dict.keys()))]
-    
-    sampled_views = common_views[::max(1, len(common_views) // 9)][:9]
-    if len(sampled_views) < 9:
-        sampled_views = common_views[:min(9, len(common_views))]
-    
+    diff_images = []
+    for view_idx, pred, gt_data in common_views:
+        diff = pred - gt_data
+        pred_mask = (pred == 0)
+        diff[pred_mask] = np.nan
+        diff_images.append((view_idx, diff, gt_data))
+
+    # Sample 9 views
+    sampled = diff_images[::max(1, len(diff_images) // 9)][:9]
+    if len(sampled) < 9:
+        sampled = diff_images[:min(9, len(diff_images))]
+
+    # Compute global max diff for consistent colormap scaling
+    global_max_diff = max(
+        [np.nanmax(np.abs(diff)) for _, diff, _ in sampled]
+    )
+    if global_max_diff == 0:
+        global_max_diff = 1
+
     fig, axes = plt.subplots(3, 3, figsize=(15, 15))
     axes = axes.flatten()
-    cmap_obj = plt.get_cmap(VisualizationConfig.DENSITY_COLORMAP)
-    for i, (view_idx, pred, gt_data) in enumerate(sampled_views):
-        if i < 9:
-            ax = axes[i]
-            pred_mask = (pred == 0)
-            norm_pred = np.clip((pred - cmap_min) / (cmap_max - cmap_min), 0, 1)
-            norm_gt = np.clip((gt_data - cmap_min) / (cmap_max - cmap_min), 0, 1)
-            pred_colors = cmap_obj(norm_pred)
-            gt_colors = cmap_obj(norm_gt)
-            pred_colors[pred_mask] = [1, 1, 1, 1]
-            gt_colors[pred_mask, :3] = gt_colors[pred_mask, :3]
-            gt_colors[pred_mask, 3] = 0.2
-            combined = np.vstack([pred_colors, gt_colors])
-            # Add a dividing white line
-            line_thickness = 2
-            h_pred = pred_colors.shape[0]
-            combined[h_pred - line_thickness:h_pred + line_thickness, :] = 1
-            ax.imshow(combined)
-            ax.set_title(f'View {view_idx}')
-            ax.axis('off')
-    for i in range(len(sampled_views), 9):
+    for i, (view_idx, diff, gt) in enumerate(sampled):
+        ax = axes[i]
+        ax.set_title(f"View {view_idx} | Pred - GT")
+        ax.axis('off')
+
+        # Normalize ground truth and make dark translucent background
+        norm_gt = np.clip((gt - cmap_min) / (cmap_max - cmap_min), 0, 1)
+        gray_gt = plt.cm.gray(norm_gt)
+        gray_gt[..., 3] = 0.2  # transparency for alpha
+
+        # Plot GT background
+        ax.imshow(gray_gt)
+
+        # Overlay the difference as a heatmap
+        im = ax.imshow(
+            diff, cmap=VisualizationConfig.DENSITY_COLORMAP,
+            vmin=-global_max_diff, vmax=global_max_diff
+        )
+
+    # Turn off unused subplots
+    for i in range(len(sampled), 9):
         axes[i].axis('off')
-    
-    plt.suptitle('Comparison: Predicted (Top) vs Ground Truth (Bottom)', fontsize=16)
-    plt.tight_layout(rect=[0, 0, 1, 0.95])
-    plt.savefig(os.path.join(output_dir, 'gt_comparison_grid.png'))
+
+    # Add colorbar
+    fig.subplots_adjust(right=0.85)
+    cbar_ax = fig.add_axes([0.88, 0.15, 0.03, 0.7])
+    fig.colorbar(im, cax=cbar_ax, label="Difference (kg/m³)")
+
+    plt.suptitle("Predicted - GT Density Overlayed on GT (Contextualized)", fontsize=16)
+    plt.tight_layout(rect=[0, 0, 0.85, 0.95])
+    plt.savefig(os.path.join(output_dir, "contextual_difference_grid.png"))
     plt.close()
-    
-    return common_views
 
 
 def create_difference_grid(common_views, output_dir, cmap_min, cmap_max):
@@ -290,17 +302,16 @@ def create_difference_grid(common_views, output_dir, cmap_min, cmap_max):
         diff = pred - gt_data
         # prediction mask
         pred_mask = (pred == 0)
-        diff[pred_mask] = 0
+        diff[pred_mask] = np.nan
         diff_images.append((view_idx, diff))
 
     sampled_diffs = diff_images[::max(1, len(diff_images) // 9)][:9]
     if len(sampled_diffs) < 9:
         sampled_diffs = diff_images[:min(9, len(diff_images))]
     
-    global_max_diff = max([np.max(np.abs(diff)) for _, diff in sampled_diffs])
+    global_max_diff = max([np.max(np.abs(diff), where=~np.isnan(diff)) for _, diff in sampled_diffs])
     if global_max_diff == 0:
         global_max_diff = 1
-        breakpoint()
     
     fig, axes = plt.subplots(3, 3, figsize=(15, 15))
     axes = axes.flatten()
@@ -479,7 +490,7 @@ def run_density_evaluation(args):
     
     common_views = None
     if perform_evaluation and gt_data_list and predicted_density_list:
-        common_views = create_comparison_grid(gt_data_list, predicted_density_list, output_dir, cmap_min, cmap_max)
+        common_views = create_contextual_difference_grid(gt_data_list, predicted_density_list, output_dir, cmap_min, cmap_max)
     
     if perform_evaluation and common_views:
         create_difference_grid(common_views, output_dir, cmap_min, cmap_max)
