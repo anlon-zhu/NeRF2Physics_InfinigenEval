@@ -8,7 +8,7 @@ from PIL import Image
 import open3d as o3d
 
 # Import our configuration
-from density_config import PathConfig, EvaluationConfig
+from density_config import PathConfig, EvaluationConfig, VisualizationConfig
 
 from feature_fusion import CLIP_BACKBONE, CLIP_CHECKPOINT
 from predict_property import predict_physical_property_query
@@ -335,7 +335,7 @@ def run_density_evaluation(args):
         
         # Save the actual density values image (we're keeping this one)
         plt.figure(figsize=(10, 10))
-        plt.imshow(rendered_density, cmap=EvaluationConfig.DENSITY_COLORMAP)
+        plt.imshow(rendered_density, cmap=VisualizationConfig.DENSITY_COLORMAP)
         plt.colorbar(label=f'Density (kg/m³) [{cmap_min:.1f} - {cmap_max:.1f}]')
         plt.title(f'Predicted Density Values - View {view_idx}')
         plt.savefig(PathConfig.get_predicted_density_map_file(output_dir, view_idx, 'png'))
