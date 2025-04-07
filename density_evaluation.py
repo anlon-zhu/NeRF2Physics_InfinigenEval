@@ -464,7 +464,7 @@ def run_density_evaluation(args):
                 # Set non-point areas in the predicted image
                 pred_colors[pred_mask] = [1, 1, 1, 1]
                 # Set the non-point areas in the gt to lower alpha
-                gt_colors[gt_mask] = [1, 1, 1, 0.3]
+                gt_colors[pred_mask] = [1, 1, 1, 0.3]
                 
                 # Stack the images vertically: predicted on top, GT on bottom
                 combined = np.vstack([pred_colors, gt_colors])

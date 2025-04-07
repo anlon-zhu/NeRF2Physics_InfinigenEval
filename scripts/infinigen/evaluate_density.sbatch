@@ -14,13 +14,12 @@
 
 # Check arguments
 if [ "$#" -lt 2 ]; then
-    echo "Usage: $0 <data_dir> [scene_name]"
+    echo "Usage: $0 <data_dir>"
     echo "Example: $0 /n/fs/scratch/${USER}/nerf2physics/infinigen_nerf_data 18015bf3"
     exit 1
 fi
 
 DATA_DIR=$1
-SCENE_NAME=$2
 
 # Set up environment variables
 export HF_HOME=/n/fs/scratch/${USER}/nerf2physics/hf_cache
@@ -41,25 +40,6 @@ export PATH=/n/fs/vl/anlon/envs/nerf2phy/bin:$PATH
 
 # Navigate to the directory
 cd /n/fs/pvl-progen/anlon/NeRF2Physics_InfinigenEval
-
-# If a specific scene is provided, process only that scene
-if [ -n "$SCENE_NAME" ]; then
-    echo "[$(date)] Processing single scene: $SCENE_NAME"
-    START_TIME=$(date +%s)
-    
-    # Run the density evaluation script for a single scene
-    python density_evaluation.py \
-        --data_dir ${DATA_DIR} \
-        --scene_name ${SCENE_NAME} \
-        --property_name density
-    
-    END_TIME=$(date +%s)
-    ELAPSED_TIME=$((END_TIME - START_TIME))
-    echo "[$(date)] Density evaluation completed in ${ELAPSED_TIME} seconds ($(($ELAPSED_TIME / 60)) minutes)"
-    exit 0
-fi
-
-# If no scene is provided, process multiple scenes using job array
 echo "[$(date)] Starting batch density evaluation (Array Job ${SLURM_ARRAY_TASK_ID})"
 START_TIME=$(date +%s)
 
@@ -118,9 +98,8 @@ for (( i=${START_IDX}; i<=${END_IDX}; i++ )); do
     # Run density evaluation on this scene
     python density_evaluation.py \
         --data_dir ${DATA_DIR} \
-        --scene_name ${SCENE_NAME} \
-        --property_name density
-        
+        --scene_name ${SCENE_NAME}
+                
     echo "[$(date)] Completed scene: ${SCENE_NAME}"
 done
 
