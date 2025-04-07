@@ -99,7 +99,6 @@ for (( i=${START_IDX}; i<=${END_IDX}; i++ )); do
     python density_evaluation.py \
         --data_dir ${DATA_DIR} \
         --scene_name ${SCENE_NAME}
-                
     echo "[$(date)] Completed scene: ${SCENE_NAME}"
 done
 
@@ -107,3 +106,4 @@ done
 END_TIME=$(date +%s)
 ELAPSED_TIME=$((END_TIME - START_TIME))
 echo "[$(date)] Batch density evaluation completed in ${ELAPSED_TIME} seconds ($(($ELAPSED_TIME / 60)) minutes)"
+exit 0

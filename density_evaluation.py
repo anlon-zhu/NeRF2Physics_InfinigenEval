@@ -463,8 +463,8 @@ def run_density_evaluation(args):
                 gt_colors = cmap(norm_gt)
                 # Set non-point areas in the predicted image
                 pred_colors[pred_mask] = [1, 1, 1, 1]
-                # Set the non-point areas in the gt to lower alpha
-                gt_colors[pred_mask] = [1, 1, 1, 0.3]
+                # Set the non-point areas in the gt to the same color as the gt but lower alpha
+                gt_colors[pred_mask] = [gt_colors[pred_mask][0], gt_colors[pred_mask][1], gt_colors[pred_mask][2], 0.5]
                 
                 # Stack the images vertically: predicted on top, GT on bottom
                 combined = np.vstack([pred_colors, gt_colors])
@@ -481,7 +481,7 @@ def run_density_evaluation(args):
         for i in range(len(sampled_views), 9):
             axes[i].axis('off')
         
-        plt.suptitle('Comparison: Predicted (Left) vs Ground Truth (Right)', fontsize=16)
+        plt.suptitle('Comparison: Predicted (Top) vs Ground Truth (Bottom)', fontsize=16)
         plt.tight_layout(rect=[0, 0, 1, 0.95])
         plt.savefig(os.path.join(output_dir, 'gt_comparison_grid.png'))
         plt.close()
