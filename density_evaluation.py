@@ -7,6 +7,9 @@ import matplotlib.pyplot as plt
 from PIL import Image
 import open3d as o3d
 
+# Import our configuration
+from density_config import PathConfig, EvaluationConfig
+
 from feature_fusion import CLIP_BACKBONE, CLIP_CHECKPOINT
 from predict_property import predict_physical_property_query
 from utils import load_ns_point_cloud, parse_transforms_json, load_images, parse_dataparser_transforms_json
@@ -16,25 +19,8 @@ from evaluation import ADE, ALDE, APE, MnRE, show_metrics
 
 def find_gt_file(gt_dir, view_idx):
     """Helper function to find ground truth density file for a specific view."""
-    # First try NPY (single-point density values) with different naming patterns
-    gt_file = os.path.join(gt_dir, f'density_{view_idx:03d}.npy')
-    if os.path.exists(gt_file):
-        return gt_file
-        
-    gt_file = os.path.join(gt_dir, f'density_{view_idx}.npy')
-    if os.path.exists(gt_file):
-        return gt_file
-        
-    # If NPY not found, fall back to PNG (3-channel visualization)
-    gt_file = os.path.join(gt_dir, f'density_{view_idx:03d}.png')
-    if os.path.exists(gt_file):
-        return gt_file
-        
-    gt_file = os.path.join(gt_dir, f'density_{view_idx}.png')
-    if os.path.exists(gt_file):
-        return gt_file
-        
-    return None
+    from density_config import PathConfig
+    return PathConfig.get_gt_density_file(gt_dir, view_idx)
 from visualization import render_pcd_headless, values_to_colors
 
 
@@ -43,8 +29,8 @@ def predict_point_densities(args, scene_dir, clip_model, clip_tokenizer):
     Get density predictions for points in the scene.
     """
     # Use point cloud from NS
-    pcd_file = os.path.join(scene_dir, 'ns', 'point_cloud.ply')
-    dt_file = os.path.join(scene_dir, 'ns', 'dataparser_transforms.json')
+    pcd_file = PathConfig.get_point_cloud_file(scene_dir)
+    dt_file = PathConfig.get_dataparser_transforms_file(scene_dir)
     
     # Load points
     query_pts = load_ns_point_cloud(pcd_file, dt_file, ds_size=args.sample_voxel_size)
@@ -67,7 +53,14 @@ def predict_point_densities(args, scene_dir, clip_model, clip_tokenizer):
     }
 
 
-def render_density_from_camera_view(points, density_values, w2c, K, hw=(1024, 1024), cmap_min=0, cmap_max=10000):
+def render_density_from_camera_view(points, density_values, w2c, K, hw=None, cmap_min=None, cmap_max=None):
+    # Use defaults from config if not specified
+    if hw is None:
+        hw = EvaluationConfig.DEFAULT_IMAGE_RESOLUTION
+    if cmap_min is None:
+        cmap_min = EvaluationConfig.DEFAULT_CMAP_MIN
+    if cmap_max is None:
+        cmap_max = EvaluationConfig.DEFAULT_CMAP_MAX
     """
     Render the density values from a specific camera view.
     Returns both the RGB visualization and a single-channel image with actual density values.
@@ -254,13 +247,14 @@ def run_density_evaluation(args):
     """
     Main function to run density evaluation.
     """
-    scenes_dir = os.path.join(args.data_dir, 'scenes')
-    scene_dir = os.path.join(scenes_dir, args.scene_name)
+    # Set up paths using PathConfig
+    scenes_dir = PathConfig.get_scenes_dir(args.data_dir)
+    scene_dir = PathConfig.get_scene_dir(args.data_dir, args.scene_name)
     
-    # Set up paths
-    gt_density_dir = os.path.join(scene_dir, 'gt_density')
-    t_file = os.path.join(scene_dir, 'transforms.json')
-    output_dir = os.path.join(scene_dir, 'density_evaluation')
+    # Set up additional paths
+    gt_density_dir = PathConfig.get_gt_density_dir(scene_dir)
+    t_file = PathConfig.get_transforms_file(scene_dir)
+    output_dir = PathConfig.get_evaluation_output_dir(scene_dir)
     os.makedirs(output_dir, exist_ok=True)
     
     # Initialize CLIP model
@@ -341,10 +335,10 @@ def run_density_evaluation(args):
         
         # Save the actual density values image (we're keeping this one)
         plt.figure(figsize=(10, 10))
-        plt.imshow(rendered_density, cmap='inferno')
+        plt.imshow(rendered_density, cmap=EvaluationConfig.DENSITY_COLORMAP)
         plt.colorbar(label=f'Density (kg/m³) [{cmap_min:.1f} - {cmap_max:.1f}]')
         plt.title(f'Predicted Density Values - View {view_idx}')
-        plt.savefig(os.path.join(output_dir, f'predicted_density_values_view_{view_idx}.png'))
+        plt.savefig(PathConfig.get_predicted_density_map_file(output_dir, view_idx, 'png'))
         plt.close()
         
         # Create enhanced visualization with only non-zero points
@@ -358,8 +352,8 @@ def run_density_evaluation(args):
             rendered_data.append((view_idx, rendered_rgb, nonzero_density))
         
         # Save both NPY (for evaluation) and NPZ (for full metadata)
-        np.save(os.path.join(output_dir, f'predicted_density_values_view_{view_idx}.npy'), rendered_density)
-        np.savez(os.path.join(output_dir, f'predicted_density_values_view_{view_idx}.npz'),
+        np.save(PathConfig.get_predicted_density_map_file(output_dir, view_idx, 'npy'), rendered_density)
+        np.savez(PathConfig.get_predicted_density_map_file(output_dir, view_idx, 'npz'),
                  density=rendered_density,
                  rgb=rendered_rgb,
                  min_value=cmap_min,
@@ -491,7 +485,8 @@ def run_density_evaluation(args):
     
     # Save all metrics
     if all_metrics:
-        with open(os.path.join(output_dir, 'density_metrics.json'), 'w') as f:
+        metrics_file = PathConfig.get_metrics_file(output_dir)
+        with open(metrics_file, 'w') as f:
             json.dump(all_metrics, f, indent=4)
         
         # Calculate and print average metrics across all views
@@ -502,7 +497,8 @@ def run_density_evaluation(args):
         for metric_name, value in avg_metrics.items():
             print(f"  {metric_name}: {value:.4f}")
         
-        with open(os.path.join(output_dir, 'density_metrics_avg.json'), 'w') as f:
+        avg_metrics_file = PathConfig.get_avg_metrics_file(output_dir)
+        with open(avg_metrics_file, 'w') as f:
             json.dump(avg_metrics, f, indent=4)
         
         # Extract metrics for histogram generation
