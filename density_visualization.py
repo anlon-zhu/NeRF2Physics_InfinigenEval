@@ -78,22 +78,22 @@ def create_aggregate_metrics_table(scene_metrics):
     # Extract metrics into arrays
     ade_values = [m.get('ADE', 0) for m in scene_metrics.values() if m is not None]
     alde_values = [m.get('ALDE', 0) for m in scene_metrics.values() if m is not None]
-    ape_values = [m.get('MedADE', 0) for m in scene_metrics.values() if m is not None]
+    med_ade_values = [m.get('MedADE', 0) for m in scene_metrics.values() if m is not None]
     mnre_values = [m.get('MnRE', 0) for m in scene_metrics.values() if m is not None]
     
     # Create DataFrame for the table
     data = {
         'Metric': ['ADE', 'ALDE', 'MedADE', 'MnRE'],
-        'Mean (All Scenes)': [
+        'Aggregate (All Scenes)': [
             np.mean(ade_values),
             np.mean(alde_values),
-            np.mean(ape_values),
+            np.median(med_ade_values),
             np.mean(mnre_values)
         ],
-        'Std. Dev. (All Scenes)': [
+        'Spread (All Scenes)': [
             np.std(ade_values),
             np.std(alde_values),
-            np.std(ape_values),
+            np.iqr(med_ade_values),
             np.std(mnre_values)
         ]
     }
@@ -101,8 +101,8 @@ def create_aggregate_metrics_table(scene_metrics):
     df = pd.DataFrame(data)
     
     # Format the table for display
-    df['Mean (All Scenes)'] = df['Mean (All Scenes)'].map(lambda x: f"{x:.2f}")
-    df['Std. Dev. (All Scenes)'] = df['Std. Dev. (All Scenes)'].map(lambda x: f"± {x:.2f}")
+    df['Aggregate (All Scenes)'] = df['Aggregate (All Scenes)'].map(lambda x: f"{x:.2f}")
+    df['Spread (All Scenes)'] = df['Spread (All Scenes)'].map(lambda x: f"{x:.2f}")
 
     # Save as CSV
     df.to_csv('metrics_summary_table.csv', index=False)
@@ -531,25 +531,6 @@ def main():
     
     # Create Figure 5: 10x10 Grid – Valid Prediction Masks
     create_grid_valid_mask(scene_dirs, view_idx=args.view_idx)
-    
-    # # Create Figure 6: Case Study – Multi-View Scene Analysis
-    # # Find case study scene directory
-    # case_study_dir = None
-    # for scene_dir in scene_dirs:
-    #     if os.path.basename(scene_dir) == args.case_study_scene:
-    #         case_study_dir = scene_dir
-    #         break
-    
-    # if case_study_dir:
-    #     create_multiview_scene_analysis(case_study_dir)
-    # else:
-    #     print(f"Warning: Case study scene {args.case_study_scene} not found.")
-    #     # Use the first scene that has both predictions and ground truth
-    #     for scene_dir in scene_dirs:
-    #         if (load_density_map(scene_dir, 0) is not None and 
-    #             load_gt_density_map(scene_dir, 0) is not None):
-    #             create_multiview_scene_analysis(scene_dir)
-    #             break
     
     print("All plots and tables generated successfully!")
 

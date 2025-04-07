@@ -245,7 +245,7 @@ def create_comparisons(gt_data_list, predicted_density_list):
                     for view_idx in sorted(set(gt_dict.keys()) & set(pred_dict.keys()))] 
     return common_views
 
-def create_contextual_difference_grid(common_views, output_dir, cmap_min, cmap_max):
+def create_contextual_difference_grid(common_views, output_dir):
     """
     Create a 3x3 grid showing predicted - GT difference maps, overlayed on the GT
     as a dimmed background for context. Only displays valid pixels.
@@ -281,8 +281,7 @@ def create_contextual_difference_grid(common_views, output_dir, cmap_min, cmap_m
         ax.axis('off')
 
         # Normalize ground truth and make dark translucent background
-        norm_gt = np.clip((gt - cmap_min) / (cmap_max - cmap_min), 0, 1)
-        gray_gt = plt.cm.gray(norm_gt)
+        gray_gt = plt.cm.gray(gt)
         gray_gt[..., 3] = 0.2  # transparency for alpha
 
         # Plot GT background
@@ -517,8 +516,8 @@ def run_density_evaluation(args):
     
     common_views = create_comparisons(gt_data_list, predicted_density_list)
     if perform_evaluation and common_views:
-        create_contextual_difference_grid(common_views, output_dir, cmap_min, cmap_max)
-        create_difference_grid(common_views, output_dir, cmap_min, cmap_max)
+        create_contextual_difference_grid(common_views, output_dir)
+        create_difference_grid(common_views, output_dir)
     
     if all_metrics:
         metrics_file = PathConfig.get_metrics_file(output_dir)
