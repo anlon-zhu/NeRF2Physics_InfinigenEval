@@ -267,7 +267,7 @@ def create_contextual_difference_grid(common_views, output_dir):
     fig, axes = plt.subplots(3, 3, figsize=(15, 15))
     axes = axes.flatten()
 
-    for i, ((view_idx, _, gt), log_diff) in enumerate(zip(sampled_diffs, log_diffs)):
+    for i, (view_idx, diff, gt) in enumerate(sampled_diffs):
         ax = axes[i]
         ax.set_title(f"View {view_idx} | log(Pred) -log(GT)")
         ax.axis('off')
@@ -276,7 +276,7 @@ def create_contextual_difference_grid(common_views, output_dir):
         ax.imshow(gt, cmap='gray', alpha=0.2)
 
         # Overlay log difference heatmap
-        im = ax.imshow(log_diff, cmap=cmap, norm=norm, alpha=1.0)
+        im = ax.imshow(diff, cmap=cmap, norm=norm, alpha=1.0)
 
     for i in range(len(sampled_diffs), 9):
         axes[i].axis('off')
