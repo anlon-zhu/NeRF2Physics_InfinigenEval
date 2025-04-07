@@ -247,23 +247,28 @@ def create_comparisons(gt_data_list, predicted_density_list):
 
 def create_contextual_difference_grid(common_views, output_dir):
     """
-    Create a 3x3 grid showing predicted - GT difference maps, overlayed on the GT
-    as a dimmed background for context. Only displays valid pixels.
+    3x3 grid showing predicted - GT difference maps overlayed on dimmed GT background.
     """
     diff_images = []
     for view_idx, pred, gt_data in common_views:
         diff = pred - gt_data
-        diff[pred == 0] = np.nan  # mask out invalid predictions
+        diff[pred == 0] = np.nan
         diff_images.append((view_idx, diff, gt_data))
 
     sampled_diffs = diff_images[::max(1, len(diff_images) // 9)][:9]
     if len(sampled_diffs) < 9:
         sampled_diffs = diff_images[:min(9, len(diff_images))]
 
-    # Compute global max diff for consistent normalization
-    cmap = plt.cm.get_cmap('plasma')  # or 'turbo' / 'plasma' for brightness
-    global_max_diff = max(np.nanmax(np.abs(diff)) for _, diff, _ in sampled_diffs)
-    norm = plt.Normalize(vmin=-global_max_diff, vmax=global_max_diff)
+    # Stack all diffs for percentile clipping
+    all_diffs = np.concatenate([diff.flatten() for _, diff, _ in sampled_diffs])
+    all_diffs = all_diffs[~np.isnan(all_diffs)]
+
+    vmin, vmax = np.percentile(all_diffs, [2, 98])  # clip extremes
+    if vmin == vmax:
+        vmin, vmax = -1, 1  # fallback
+
+    cmap = plt.cm.get_cmap("seismic")  # for signed differences
+    norm = plt.Normalize(vmin=vmin, vmax=vmax)
 
     fig, axes = plt.subplots(3, 3, figsize=(15, 15))
     axes = axes.flatten()
@@ -273,21 +278,15 @@ def create_contextual_difference_grid(common_views, output_dir):
         ax.set_title(f"View {view_idx} | Pred - GT")
         ax.axis('off')
 
-        # Gray GT background with low alpha
-        valid_mask = ~np.isnan(diff)
-        gray_gt = plt.cm.gray(gt)
-        # Gray_gt should not show where diff is valid
-        gray_gt[valid_mask] = np.nan
-        ax.imshow(gray_gt, alpha=0.3)
+        # Show grayscale GT as base
+        ax.imshow(gt, cmap='gray', alpha=0.5)
 
-        # Overlay the diff heatmap
-        im = ax.imshow(diff, cmap=cmap, norm=norm)
+        # Overlay difference heatmap
+        im = ax.imshow(diff, cmap=cmap, norm=norm, alpha=0.9)
 
-    # Hide unused subplots
     for i in range(len(sampled_diffs), 9):
         axes[i].axis('off')
 
-    # Colorbar
     fig.subplots_adjust(right=0.85)
     cbar_ax = fig.add_axes([0.88, 0.15, 0.03, 0.7])
     fig.colorbar(im, cax=cbar_ax, label="Difference (kg/m³)")
