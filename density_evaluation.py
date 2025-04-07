@@ -443,10 +443,6 @@ def run_density_evaluation(args):
         # Create the grid
         fig, axes = plt.subplots(3, 3, figsize=(15, 15))
         axes = axes.flatten()
-        
-        # Use the same colormap for both images
-        cmap = plt.get_cmap(VisualizationConfig.DENSITY_COLORMAP)
-        
         for i, (view_idx, pred, gt_data) in enumerate(sampled_views):
             if i < 9:
                 ax = axes[i]
@@ -459,12 +455,13 @@ def run_density_evaluation(args):
                 norm_pred = np.clip(norm_pred, 0, 1)
                 norm_gt = np.clip(norm_gt, 0, 1)
                 
-                pred_colors = cmap(norm_pred)
-                gt_colors = cmap(norm_gt)
+                pred_colors = plt.cm.jet(norm_pred)
+                gt_colors = plt.cm.jet(norm_gt)
                 # Set non-point areas in the predicted image
                 pred_colors[pred_mask] = [1, 1, 1, 1]
                 # Set the non-point areas in the gt to the same color as the gt but lower alpha
-                gt_colors[pred_mask] = [gt_colors[pred_mask][0], gt_colors[pred_mask][1], gt_colors[pred_mask][2], 0.5]
+                gt_colors[pred_mask, :3] = gt_colors[pred_mask, :3]  # Keep RGB values
+                gt_colors[pred_mask, 3] = 0.5  # Set alpha to 0.5
                 
                 # Stack the images vertically: predicted on top, GT on bottom
                 combined = np.vstack([pred_colors, gt_colors])
@@ -489,7 +486,7 @@ def run_density_evaluation(args):
     if perform_evaluation and common_views:
         diff_images = []
         for view_idx, pred, gt_data in common_views:
-            diff = np.abs(pred - gt_data)
+            diff = pred - gt_data
             # Set non-point areas in the predicted image to transparent
             diff[pred == 0] = np.nan
             diff_images.append((view_idx, diff))
@@ -500,7 +497,7 @@ def run_density_evaluation(args):
             sampled_diffs = diff_images[:min(9, len(diff_images))]
         
         # Determine a global maximum difference for consistent scaling
-        global_max_diff = max([np.max(diff) for _, diff in sampled_diffs])
+        global_max_diff = max([np.max(np.abs(diff)) for _, diff in sampled_diffs])
         if global_max_diff == 0:
             global_max_diff = 1  # Prevent divide by zero
         
@@ -510,17 +507,17 @@ def run_density_evaluation(args):
             if i < 9:
                 ax = axes[i]
                 im = ax.imshow(diff, cmap=VisualizationConfig.DENSITY_COLORMAP, vmin=0, vmax=global_max_diff)
-                ax.set_title(f'View {view_idx} | Abs Diff')
+                ax.set_title(f'View {view_idx} | Difference (Predicted - Ground Truth kg/m³)')
                 ax.axis('off')
         for i in range(len(sampled_diffs), 9):
             axes[i].axis('off')
         fig.subplots_adjust(right=0.85)
         cbar_ax = fig.add_axes([0.88, 0.15, 0.03, 0.7])
-        fig.colorbar(im, cax=cbar_ax, label='Absolute Difference')
+        fig.colorbar(im, cax=cbar_ax, label='Difference (kg/m³)')
         
-        plt.suptitle('Absolute Difference Grid', fontsize=16)
+        plt.suptitle('Difference Grid', fontsize=16)
         plt.tight_layout(rect=[0, 0, 0.85, 0.95])
-        plt.savefig(os.path.join(output_dir, 'abs_difference_grid.png'))
+        plt.savefig(os.path.join(output_dir, 'difference_grid.png'))
         plt.close()
 
     print(f"Density evaluation complete. Results saved to {output_dir}")
