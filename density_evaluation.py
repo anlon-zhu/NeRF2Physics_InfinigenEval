@@ -247,12 +247,11 @@ def create_comparisons(gt_data_list, predicted_density_list):
 
 def create_contextual_difference_grid(common_views, output_dir):
     """
-    3x3 grid showing log(|pred - GT|) overlayed on GT.
-    Helps visually amplify small differences without being dominated by outliers.
+    3x3 grid showing predicted - GT difference maps overlayed on dimmed GT background.
     """
     diff_images = []
     for view_idx, pred, gt_data in common_views:
-        diff = np.log(1 + pred) - np.log(1 + gt_data)
+        diff = pred - gt_data
         diff[pred == 0] = np.nan
         diff_images.append((view_idx, diff, gt_data))
 
@@ -260,22 +259,30 @@ def create_contextual_difference_grid(common_views, output_dir):
     if len(sampled_diffs) < 9:
         sampled_diffs = diff_images[:min(9, len(diff_images))]
 
-    global_max_log = max(np.nanmax(diff) for _, diff, _ in sampled_diffs)
-    norm = plt.Normalize(vmin=0, vmax=global_max_log)
-    cmap = plt.cm.get_cmap('turbo')
+    # Stack all diffs for percentile clipping
+    all_diffs = np.concatenate([diff.flatten() for _, diff, _ in sampled_diffs])
+    all_diffs = all_diffs[~np.isnan(all_diffs)]
+
+    # Normalize so that most points fall within the middle of the color range
+    vmin, vmax = np.percentile(all_diffs, [25, 75])  # clip extremes
+    if vmin == vmax:
+        vmin, vmax = -1, 1  # fallback
+
+    cmap = plt.cm.get_cmap("seismic")  # for signed differences
+    norm = plt.Normalize(vmin=vmin, vmax=vmax)
 
     fig, axes = plt.subplots(3, 3, figsize=(15, 15))
     axes = axes.flatten()
 
     for i, (view_idx, diff, gt) in enumerate(sampled_diffs):
         ax = axes[i]
-        ax.set_title(f"View {view_idx} | log(Pred) -log(GT)")
+        ax.set_title(f"View {view_idx} | Pred - GT")
         ax.axis('off')
 
-        # GT background
+        # Show grayscale GT as base
         ax.imshow(gt, cmap='gray', alpha=0.2)
 
-        # Overlay log difference heatmap
+        # Overlay difference heatmap
         im = ax.imshow(diff, cmap=cmap, norm=norm, alpha=1.0)
 
     for i in range(len(sampled_diffs), 9):
@@ -283,9 +290,9 @@ def create_contextual_difference_grid(common_views, output_dir):
 
     fig.subplots_adjust(right=0.85)
     cbar_ax = fig.add_axes([0.88, 0.15, 0.03, 0.7])
-    fig.colorbar(im, cax=cbar_ax, label="log₁₀(|Difference| + 1)")
+    fig.colorbar(im, cax=cbar_ax, label="Difference (kg/m³)")
 
-    plt.suptitle("Log Difference Overlayed on GT", fontsize=16)
+    plt.suptitle("Predicted - GT Density Overlayed on GT (Contextualized)", fontsize=16)
     plt.tight_layout(rect=[0, 0, 0.85, 0.95])
     plt.savefig(os.path.join(output_dir, "contextual_difference_grid.png"))
     plt.close()
