@@ -96,7 +96,7 @@ class VisualizationConfig:
     """Configuration for visualization parameters"""
     
     # Default colormap for density visualization
-    DENSITY_COLORMAP = 'viridis'
+    DENSITY_COLORMAP = 'inferno'
     DIFF_COLORMAP = 'inferno'
     MASK_COLORMAP = 'binary'
     

@@ -461,8 +461,10 @@ def run_density_evaluation(args):
                 
                 pred_colors = cmap(norm_pred)
                 gt_colors = cmap(norm_gt)
-                # Set non-point areas in the predicted image to black
-                pred_colors[pred_mask] = [0, 0, 0, 1]
+                # Set non-point areas in the predicted image
+                pred_colors[pred_mask] = [1, 1, 1, 1]
+                # Set the non-point areas in the gt to lower alpha
+                gt_colors[gt_mask] = [1, 1, 1, 0.3]
                 
                 # Stack the images vertically: predicted on top, GT on bottom
                 combined = np.vstack([pred_colors, gt_colors])
@@ -488,6 +490,8 @@ def run_density_evaluation(args):
         diff_images = []
         for view_idx, pred, gt_data in common_views:
             diff = np.abs(pred - gt_data)
+            # Set non-point areas in the predicted image to transparent
+            diff[pred == 0] = np.nan
             diff_images.append((view_idx, diff))
         
         # Sample up to 9 views for the grid
