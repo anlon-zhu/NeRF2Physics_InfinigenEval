@@ -5,8 +5,8 @@
 #SBATCH --partition=pvl
 #SBATCH --account=pvl
 #SBATCH --time=4:00:00
-#SBATCH --mem=32G
-#SBATCH --cpus-per-task=2
+#SBATCH --mem=16G
+#SBATCH --cpus-per-task=4
 #SBATCH --gres=gpu:1
 #SBATCH --array=0-4
 #SBATCH --mail-type=BEGIN,END,FAIL

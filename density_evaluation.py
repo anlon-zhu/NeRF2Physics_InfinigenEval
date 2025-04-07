@@ -448,8 +448,16 @@ def run_density_evaluation(args):
                 
                 # For the predicted density: mask non-points (0 values) and set them to black
                 pred_mask = (pred == 0)
-                pred_colors = cmap(pred)
-                gt_colors = cmap(gt_data)
+
+                # Normalize the values to the range [0, 1] for the colormap
+                norm_pred = (pred - cmap_min) / (cmap_max - cmap_min)
+                norm_gt = (gt_data - cmap_min) / (cmap_max - cmap_min)
+                norm_pred = np.clip(norm_pred, 0, 1)
+                norm_gt = np.clip(norm_gt, 0, 1)
+                
+                # Map the normalized values to colors
+                pred_colors = cmap(norm_pred)
+                gt_colors = cmap(norm_gt)
                 # Set non-point areas in the predicted image
                 pred_colors[pred_mask] = [1, 1, 1, 1]
                 # Set the non-point areas in the gt to the same color as the gt but lower alpha
