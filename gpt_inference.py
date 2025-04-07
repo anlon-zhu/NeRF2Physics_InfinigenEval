@@ -134,12 +134,28 @@ def parse_material_list(matlist, max_n=5):
             return None
 
         mat_name = mat_name[1:]
-        mat_names.append(mat_name.lower())  # force lowercase
-
-        values = values.strip().split(' ')[0]
-        values = values.replace(",", "")
-        if values[-1] == ')':
-            values = values[:-1]
+        
+        # Clean up the values string
+        values = values.strip()
+        
+        # Extract the first part before any space (likely contains the measurement)
+        first_part = values.split(' ')[0]
+        
+        # Remove any closing parenthesis
+        if first_part.endswith(')'):
+            first_part = first_part[:-1]
+            
+        # Remove any commas
+        first_part = first_part.replace(",", "")
+        
+        # Check if this is a valid numeric value or range
+        # If it doesn't contain any digits, it's likely N/A or similar
+        if not any(char.isdigit() for char in first_part):
+            print(f"Skipping {mat_name} as thickness appears to be non-applicable: {values}")
+            continue
+            
+        # Use the cleaned up value for further processing
+        values = first_part
 
         # Value may or may not be a range
         splitted = values.split('-')
@@ -147,14 +163,19 @@ def parse_material_list(matlist, max_n=5):
             float(splitted[0])
         except ValueError:
             print('value cannot be converted to float %s' % matlist)
-            return None
+            # Instead of returning None, just skip this material
+            continue
+            
+        # Add valid material
+        mat_names.append(mat_name.lower())  # force lowercase
+        
         if len(splitted) == 2:
             mat_vals.append([float(splitted[0]), float(splitted[1])])
         elif len(splitted) == 1:
             mat_vals.append([float(splitted[0]), float(splitted[0])])
         else:
-            print('bad format %s' % matlist)
-            return None
+            print('bad format for %s, skipping' % mat_name)
+            continue
         
     return mat_names, mat_vals
 

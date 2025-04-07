@@ -36,7 +36,7 @@ def gpt_wrapper(gpt_fn, parse_fn, max_tries=10, sleep_time=3):
             result = parse_fn(gpt_response)
         except:
             result = None
-    return result
+    return gpt_response
 
 
 def show_img_to_caption(scene_dir, idx_to_caption):
@@ -135,11 +135,30 @@ def predict_thickness(args, scene_dir, mode='list', show=False):
     info['thickness'] = thickness
     
     print('thickness (cm):')
-    mat_names, mat_vals = parse_material_list(thickness)
+    # Handle the case where parse_material_list might return None
+    result = parse_material_list(thickness)
+    if result is None:
+        print(f"Warning: Could not parse any valid material thicknesses from: {thickness}")
+        # Return the info without adding thickness data
+        return info
+        
+    mat_names, mat_vals = result
+    
+    # Check if we have any valid materials
+    if len(mat_names) == 0:
+        print(f"Warning: No valid material thicknesses found in: {thickness}")
+        # Return the info without adding thickness data
+        return info
+        
+    # Print the valid material thicknesses
     for mat_i, mat_name in enumerate(mat_names):
         print('%16s: %8.1f -%8.1f' % (mat_name, mat_vals[mat_i][0], mat_vals[mat_i][1]))
     if show:
         show_img_to_caption(scene_dir, int(info['idx_to_caption']))
+    
+    # Save the valid material thicknesses to the info dictionary
+    info['valid_materials'] = mat_names
+    info['valid_thicknesses'] = [vals for vals in mat_vals]
     
     # save info to json
     with open(os.path.join(scene_dir, '%s.json' % args.mats_save_name), 'w') as f:
