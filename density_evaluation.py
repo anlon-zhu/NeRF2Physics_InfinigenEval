@@ -268,7 +268,7 @@ def create_contextual_difference_grid(common_views, output_dir):
     if vmin == vmax:
         vmin, vmax = -1, 1  # fallback
 
-    cmap = plt.cm.get_cmap("seismic")  # for signed differences
+    cmap = plt.cm.get_cmap("bwr")  # for signed differences
     norm = plt.Normalize(vmin=vmin, vmax=vmax)
 
     fig, axes = plt.subplots(3, 3, figsize=(15, 15))
