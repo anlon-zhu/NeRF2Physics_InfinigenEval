@@ -263,7 +263,7 @@ def create_contextual_difference_grid(common_views, output_dir):
     all_diffs = np.concatenate([diff.flatten() for _, diff, _ in sampled_diffs])
     all_diffs = all_diffs[~np.isnan(all_diffs)]
 
-    vmin, vmax = np.percentile(all_diffs, [2, 98])  # clip extremes
+    vmin, vmax = np.percentile(all_diffs, [10, 90])  # clip extremes
     if vmin == vmax:
         vmin, vmax = -1, 1  # fallback
 
