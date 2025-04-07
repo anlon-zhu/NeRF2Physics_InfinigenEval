@@ -13,7 +13,7 @@ from feature_fusion import CLIP_BACKBONE, CLIP_CHECKPOINT
 from predict_property import predict_physical_property_query
 from utils import load_ns_point_cloud, parse_transforms_json
 from arguments import get_args
-from evaluation import ADE, ALDE, APE, MnRE
+from evaluation import ADE, ALDE, MedADE, MnRE
 from visualization import render_pcd_headless, values_to_colors
 
 
@@ -136,11 +136,11 @@ def evaluate_density(rendered_density, rendered_rgb, gt_density, gt_vmin, gt_vma
     
     if not is_gt_npy:
         print("WARNING: Skipping evaluation - only single-channel density values (NPY/NPZ) are used for evaluation")
-        return {'ADE': 0, 'ALDE': 0, 'APE': 0, 'MnRE': 0}
+        return {'ADE': 0, 'ALDE': 0, 'MedADE': 0, 'MnRE': 0}
     
     if rendered_density.shape != gt_density.shape:
         print(f"WARNING: Format mismatch - Rendered shape: {rendered_density.shape} vs GT shape: {gt_density.shape}")
-        return {'ADE': 0, 'ALDE': 0, 'APE': 0, 'MnRE': 0}
+        return {'ADE': 0, 'ALDE': 0, 'MedADE': 0, 'MnRE': 0}
     
     # Flatten and filter valid pixels (exclude zeros and -1 in GT)
     pixel_values = rendered_density.flatten()
@@ -157,7 +157,7 @@ def evaluate_density(rendered_density, rendered_rgb, gt_density, gt_vmin, gt_vma
     
     if len(valid_pred) < 10:
         print("WARNING: Not enough valid pixels for meaningful evaluation")
-        return {'ADE': 0, 'ALDE': 0, 'APE': 0, 'MnRE': 0}
+        return {'ADE': 0, 'ALDE': 0, 'MedADE': 0, 'MnRE': 0}
     
     epsilon = 1e-8
     safe_pred = np.maximum(valid_pred, epsilon)
@@ -167,13 +167,12 @@ def evaluate_density(rendered_density, rendered_rgb, gt_density, gt_vmin, gt_vma
         metrics = {
             'ADE': ADE(safe_pred, safe_gt),
             'ALDE': ALDE(safe_pred, safe_gt),
-            'APE': APE(safe_pred, safe_gt),
             'MedADE': MedADE(safe_pred, safe_gt),
             'MnRE': MnRE(safe_pred, safe_gt)
         }
     except Exception as e:
         print(f"WARNING: Error computing metrics: {e}")
-        return {'ADE': 0, 'ALDE': 0, 'APE': 0, 'MnRE': 0}
+        return {'ADE': 0, 'ALDE': 0, 'MedADE': 0, 'MnRE': 0}
     
     return metrics
 
@@ -322,7 +321,7 @@ def create_difference_grid(common_views, output_dir, cmap_min, cmap_max):
 
 def plot_metrics_histograms(all_metrics, output_dir):
     """
-    Plot histograms of each metric (ADE, ALDE, APE, MnRE) across all views.
+    Plot histograms of each metric (ADE, ALDE, MedADE, MnRE) across all views.
     """
     metrics_by_type = {metric: [m[metric] for m in all_metrics.values()]
                        for metric in ['ADE', 'ALDE', 'MedADE', 'MnRE']}
@@ -352,13 +351,13 @@ def plot_scene_metrics_histograms(args, all_metrics, output_dir):
     scene_metrics = {}
     for scene_name in args.scene_name.split(','):
         scene_metrics[scene_name] = {}
-        for metric_type in ['ADE', 'ALDE', 'APE', 'MnRE']:
+        for metric_type in ['ADE', 'ALDE', 'MedADE', 'MnRE']:
             scene_views = [v for k, v in all_metrics.items() if scene_name in k]
             if scene_views:
                 scene_metrics[scene_name][metric_type] = np.mean([v[metric_type] for v in scene_views])
     
     plt.figure(figsize=(15, 10))
-    for i, metric_name in enumerate(['ADE', 'ALDE', 'APE', 'MnRE'], 1):
+    for i, metric_name in enumerate(['ADE', 'ALDE', 'MedADE', 'MnRE'], 1):
         values = [metrics[metric_name] for metrics in scene_metrics.values() if metric_name in metrics]
         if values:
             plt.subplot(2, 2, i)
