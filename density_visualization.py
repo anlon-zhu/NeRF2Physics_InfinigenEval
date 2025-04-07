@@ -518,8 +518,12 @@ def main():
     
     # Create Figure 2: Scene-wise ADE (Sorted)
     create_scenewise_ade_plot(scene_metrics)
+
+    # Create Figure 2.5: Scene-wise MedADE (Sorted)
+    # TODO: implement create_scenewise_med_ade_plot(scene_metrics)
     
     # Create Figure 3: 10x10 Grid – Pixel-Level Density Difference
+    # TODO: do contextualized difference as in density_evaluation.py
     create_grid_diff_density(scene_dirs, view_idx=args.view_idx)
     
     # Create Figure 4: 10x10 Grid – Raw Predicted Densities
@@ -528,24 +532,24 @@ def main():
     # Create Figure 5: 10x10 Grid – Valid Prediction Masks
     create_grid_valid_mask(scene_dirs, view_idx=args.view_idx)
     
-    # Create Figure 6: Case Study – Multi-View Scene Analysis
-    # Find case study scene directory
-    case_study_dir = None
-    for scene_dir in scene_dirs:
-        if os.path.basename(scene_dir) == args.case_study_scene:
-            case_study_dir = scene_dir
-            break
+    # # Create Figure 6: Case Study – Multi-View Scene Analysis
+    # # Find case study scene directory
+    # case_study_dir = None
+    # for scene_dir in scene_dirs:
+    #     if os.path.basename(scene_dir) == args.case_study_scene:
+    #         case_study_dir = scene_dir
+    #         break
     
-    if case_study_dir:
-        create_multiview_scene_analysis(case_study_dir)
-    else:
-        print(f"Warning: Case study scene {args.case_study_scene} not found.")
-        # Use the first scene that has both predictions and ground truth
-        for scene_dir in scene_dirs:
-            if (load_density_map(scene_dir, 0) is not None and 
-                load_gt_density_map(scene_dir, 0) is not None):
-                create_multiview_scene_analysis(scene_dir)
-                break
+    # if case_study_dir:
+    #     create_multiview_scene_analysis(case_study_dir)
+    # else:
+    #     print(f"Warning: Case study scene {args.case_study_scene} not found.")
+    #     # Use the first scene that has both predictions and ground truth
+    #     for scene_dir in scene_dirs:
+    #         if (load_density_map(scene_dir, 0) is not None and 
+    #             load_gt_density_map(scene_dir, 0) is not None):
+    #             create_multiview_scene_analysis(scene_dir)
+    #             break
     
     print("All plots and tables generated successfully!")
 

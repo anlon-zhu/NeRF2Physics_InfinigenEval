@@ -256,13 +256,13 @@ def create_contextual_difference_grid(common_views, output_dir, cmap_min, cmap_m
         # prediction mask
         pred_mask = (pred == 0)
         diff[pred_mask] = np.nan
-        diff_images.append((view_idx, diff))
+        diff_images.append((view_idx, diff, gt_data))
 
     sampled_diffs = diff_images[::max(1, len(diff_images) // 9)][:9]
     if len(sampled_diffs) < 9:
         sampled_diffs = diff_images[:min(9, len(diff_images))]
     
-    global_max_diff = max([np.nanmax(np.abs(diff)) for _, diff in sampled_diffs])
+    global_max_diff = max([np.nanmax(np.abs(diff)) for _, diff, _ in sampled_diffs])
 
     if global_max_diff == 0:
         global_max_diff = 1
@@ -373,11 +373,10 @@ def plot_metrics_histograms(all_metrics, output_dir):
         if metric_name != 'MedADE':
             plt.axvline(np.mean(values), color='r', linestyle='dashed', linewidth=1,
                         label=f'Mean: {np.mean(values):.4f}')
-            plt.legend()
         else:
             plt.axvline(np.median(values), color='r', linestyle='dashed', linewidth=1,
                         label=f'Median: {np.median(values):.4f}')
-            plt.legend()
+        plt.legend()
     plt.tight_layout()
     plt.savefig(os.path.join(output_dir, 'metrics_histograms_all_views.png'))
     plt.close()
