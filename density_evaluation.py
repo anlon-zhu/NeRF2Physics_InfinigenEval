@@ -307,6 +307,7 @@ def run_density_evaluation(args):
     # Store rendered data for grid visualization
     rendered_data = []
     gt_data_list = []
+    predicted_density_list = []
     
     for view_idx, w2c in enumerate(w2cs):
         print(f"Processing view {view_idx}")
@@ -362,10 +363,12 @@ def run_density_evaluation(args):
         # Compare with ground truth if available
         if perform_evaluation:
             # Get ground truth file
+            predicted_density_list.append((view_idx, rendered_density))
             gt_file = find_gt_file(gt_density_dir, view_idx)
             
             if os.path.exists(gt_file):
                 gt_data, gt_vmin, gt_vmax = load_ground_truth_density(gt_file)
+                gt_data_list.append((view_idx, gt_data))
                 is_gt_npy = gt_file.endswith('.npy')
                 metrics = evaluate_density_against_gt(
                     rendered_density, 
@@ -375,11 +378,7 @@ def run_density_evaluation(args):
                     gt_vmax, 
                     is_gt_npy=is_gt_npy
                 )
-                all_metrics[f'view_{view_idx}'] = metrics
-                
-                # Store GT data for grid visualization
-                gt_data_list.append((view_idx, gt_data))
-                
+                all_metrics[f'view_{view_idx}'] = metrics                
                 # Print metrics
                 print(f"Metrics for view {view_idx}:")
                 for metric_name, value in metrics.items():
@@ -421,19 +420,19 @@ def run_density_evaluation(args):
         plt.close()
     
     # Create 3x3 grid visualization of ground truth comparison if available
-    if perform_evaluation and gt_data_list:
-        # Sort by view index and sample every 3rd view until we get 9 views
+    if perform_evaluation and gt_data_list and predicted_density_list:
+       # Sort both lists by view index
         gt_data_list.sort(key=lambda x: x[0])
-        rendered_data.sort(key=lambda x: x[0])
+        predicted_density_list.sort(key=lambda x: x[0])
         
-        # Find views that have both rendered and GT data
+        # Find views that have both predicted density and GT data
         common_views = []
         for view_idx, gt_data in gt_data_list:
-            for r_view_idx, rgb, _ in rendered_data:
-                if view_idx == r_view_idx:
-                    common_views.append((view_idx, rgb, gt_data))
+            for p_view_idx, pred_density in predicted_density_list:
+                if view_idx == p_view_idx:
+                    common_views.append((view_idx, pred_density, gt_data))
                     break
-        
+    
         # Sample views
         sampled_views = common_views[::max(1, len(common_views) // 9)][:9]
         
@@ -445,32 +444,34 @@ def run_density_evaluation(args):
         fig, axes = plt.subplots(3, 3, figsize=(15, 15))
         axes = axes.flatten()
         
-        for i, (view_idx, rgb, gt_data) in enumerate(sampled_views):
-            if i < 9:  # Ensure we don't exceed the grid size
+        # Use the same colormap for both images
+        cmap = plt.get_cmap(VisualizationConfig.DENSITY_COLORMAP)
+        
+        for i, (view_idx, pred, gt_data) in enumerate(sampled_views):
+            if i < 9:
                 ax = axes[i]
                 
-                # Create a side-by-side comparison
-                norm_rendered = (rgb - rgb.min()) / (rgb.max() - rgb.min() + 1e-8)
-                norm_gt = (gt_data - gt_data.min()) / (gt_data.max() - gt_data.min() + 1e-8)
+                # For the predicted density: mask non-points (0 values) and set them to black
+                pred_mask = (pred == 0)
+                # Normalize using the same colormap scale (do not perform per-image norming)
+                norm_pred = (pred - cmap_min) / (cmap_max - cmap_min)
+                norm_gt = (gt_data - cmap_min) / (cmap_max - cmap_min)
+                norm_pred = np.clip(norm_pred, 0, 1)
+                norm_gt = np.clip(norm_gt, 0, 1)
                 
-                # Combine into a single image with a dividing line
-                comparison = np.zeros((norm_rendered.shape[0], norm_rendered.shape[1] * 2, 3))
-                comparison[:, :norm_rendered.shape[1]] = norm_rendered
+                pred_colors = cmap(norm_pred)
+                gt_colors = cmap(norm_gt)
+                # Set non-point areas in the predicted image to black
+                pred_colors[pred_mask] = [0, 0, 0, 1]
                 
-                # Convert gt_data to RGB if it's single channel
-                if len(norm_gt.shape) == 2:
-                    cmap = plt.get_cmap('inferno')
-                    norm_gt_rgb = cmap(norm_gt)
-                    norm_gt_rgb = norm_gt_rgb[:, :, :3]  # Remove alpha channel
-                else:
-                    norm_gt_rgb = norm_gt
+                # Stack the images vertically: predicted on top, GT on bottom
+                combined = np.vstack([pred_colors, gt_colors])
+                # Optionally, add a horizontal white dividing line between the two halves:
+                line_thickness = 2
+                h_pred = pred_colors.shape[0]
+                combined[h_pred - line_thickness:h_pred + line_thickness, :] = 1  # White line
                 
-                comparison[:, norm_rendered.shape[1]:] = norm_gt_rgb
-                
-                # Add a vertical line to separate the images
-                comparison[:, norm_rendered.shape[1]-1:norm_rendered.shape[1]+1] = [1, 1, 1]  # White line
-                
-                ax.imshow(comparison)
+                ax.imshow(combined)
                 ax.set_title(f'View {view_idx}')
                 ax.axis('off')
         
@@ -483,6 +484,43 @@ def run_density_evaluation(args):
         plt.savefig(os.path.join(output_dir, 'gt_comparison_grid.png'))
         plt.close()
     
+    if perform_evaluation and common_views:
+        diff_images = []
+        for view_idx, pred, gt_data in common_views:
+            diff = np.abs(pred - gt_data)
+            diff_images.append((view_idx, diff))
+        
+        # Sample up to 9 views for the grid
+        sampled_diffs = diff_images[::max(1, len(diff_images) // 9)][:9]
+        if len(sampled_diffs) < 9:
+            sampled_diffs = diff_images[:min(9, len(diff_images))]
+        
+        # Determine a global maximum difference for consistent scaling
+        global_max_diff = max([np.max(diff) for _, diff in sampled_diffs])
+        if global_max_diff == 0:
+            global_max_diff = 1  # Prevent divide by zero
+        
+        fig, axes = plt.subplots(3, 3, figsize=(15, 15))
+        axes = axes.flatten()
+        for i, (view_idx, diff) in enumerate(sampled_diffs):
+            if i < 9:
+                ax = axes[i]
+                im = ax.imshow(diff, cmap=VisualizationConfig.DENSITY_COLORMAP, vmin=0, vmax=global_max_diff)
+                ax.set_title(f'View {view_idx} | Abs Diff')
+                ax.axis('off')
+        for i in range(len(sampled_diffs), 9):
+            axes[i].axis('off')
+        fig.subplots_adjust(right=0.85)
+        cbar_ax = fig.add_axes([0.88, 0.15, 0.03, 0.7])
+        fig.colorbar(im, cax=cbar_ax, label='Absolute Difference')
+        
+        plt.suptitle('Absolute Difference Grid', fontsize=16)
+        plt.tight_layout(rect=[0, 0, 0.85, 0.95])
+        plt.savefig(os.path.join(output_dir, 'abs_difference_grid.png'))
+        plt.close()
+
+    print(f"Density evaluation complete. Results saved to {output_dir}")
+
     # Save all metrics
     if all_metrics:
         metrics_file = PathConfig.get_metrics_file(output_dir)
