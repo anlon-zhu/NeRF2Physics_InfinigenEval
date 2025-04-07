@@ -262,14 +262,10 @@ def create_contextual_difference_grid(common_views, output_dir):
     # Stack all diffs for percentile clipping
     all_diffs = np.concatenate([diff.flatten() for _, diff, _ in sampled_diffs])
     all_diffs = all_diffs[~np.isnan(all_diffs)]
-
     # Normalize so that most points fall within the middle of the color range
-    vmin, vmax = np.percentile(all_diffs, [25, 75])  # clip extremes
-    if vmin == vmax:
-        vmin, vmax = -1, 1  # fallback
-
-    cmap = plt.cm.get_cmap("bwr")  # for signed differences
+    vmin, vmax = np.percentile(all_diffs, [1, 99])
     norm = plt.Normalize(vmin=vmin, vmax=vmax)
+    cmap = plt.cm.get_cmap("bwr")  # for signed differences
 
     fig, axes = plt.subplots(3, 3, figsize=(15, 15))
     axes = axes.flatten()
@@ -280,7 +276,7 @@ def create_contextual_difference_grid(common_views, output_dir):
         ax.axis('off')
 
         # Show grayscale GT as base
-        ax.imshow(gt, cmap='gray', alpha=0.2)
+        ax.imshow(gt, cmap='gray', alpha=0.1)
 
         # Overlay difference heatmap
         im = ax.imshow(diff, cmap=cmap, norm=norm, alpha=1.0)
