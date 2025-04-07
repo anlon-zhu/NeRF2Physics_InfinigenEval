@@ -310,6 +310,10 @@ def run_density_evaluation(args):
     # Render density from different camera views and compare with ground truth
     all_metrics = {}
     
+    # Store rendered data for grid visualization
+    rendered_data = []
+    gt_data_list = []
+    
     for view_idx, w2c in enumerate(w2cs):
         print(f"Processing view {view_idx}")
         
@@ -335,15 +339,7 @@ def run_density_evaluation(args):
             cmap_max=cmap_max
         )
         
-        # Save the RGB visualization 
-        plt.figure(figsize=(10, 10))
-        plt.imshow(rendered_rgb)
-        plt.colorbar(label=f'Density (kg/m³) [{cmap_min:.1f} - {cmap_max:.1f}]')
-        plt.title(f'Predicted Density RGB Visualization - View {view_idx}')
-        plt.savefig(os.path.join(output_dir, f'predicted_density_rgb_view_{view_idx}.png'))
-        plt.close()
-        
-        # Save the actual density values image
+        # Save the actual density values image (we're keeping this one)
         plt.figure(figsize=(10, 10))
         plt.imshow(rendered_density, cmap='inferno')
         plt.colorbar(label=f'Density (kg/m³) [{cmap_min:.1f} - {cmap_max:.1f}]')
@@ -355,26 +351,11 @@ def run_density_evaluation(args):
         # This makes sparse points more visible
         nonzero_mask = rendered_density > 0
         if np.any(nonzero_mask):
-            plt.figure(figsize=(10, 10))
             nonzero_density = np.copy(rendered_density)
             nonzero_density[nonzero_density == 0] = np.nan  # NaN values appear transparent
-            plt.imshow(nonzero_density, cmap='jet', interpolation='none')
-            plt.colorbar(label=f'Density (kg/m³) [{cmap_min:.1f} - {cmap_max:.1f}]')
-            plt.title(f'Non-zero Density Points - View {view_idx}\n{np.sum(nonzero_mask)} points')
-            plt.savefig(os.path.join(output_dir, f'nonzero_density_view_{view_idx}.png'))
-            plt.close()
-        
-        # Create a debug visualization to show which pixels have actual values
-        # This helps diagnose sparse point cloud projection issues
-        filled_mask = rendered_density > 0
-        filled_pixel_count = np.sum(filled_mask)
-        filled_percentage = filled_pixel_count / (hw[0] * hw[1]) * 100
-        
-        plt.figure(figsize=(10, 10))
-        plt.imshow(filled_mask, cmap='gray')
-        plt.title(f'Filled Pixels Mask - View {view_idx}\n{filled_pixel_count} filled pixels ({filled_percentage:.2f}%)')
-        plt.savefig(os.path.join(output_dir, f'filled_pixels_mask_view_{view_idx}.png'))
-        plt.close()
+            
+            # Store for grid visualization
+            rendered_data.append((view_idx, rendered_rgb, nonzero_density))
         
         # Save both NPY (for evaluation) and NPZ (for full metadata)
         np.save(os.path.join(output_dir, f'predicted_density_values_view_{view_idx}.npy'), rendered_density)
@@ -402,40 +383,111 @@ def run_density_evaluation(args):
                 )
                 all_metrics[f'view_{view_idx}'] = metrics
                 
-                # Save comparison visualization
-                plt.figure(figsize=(15, 5))
-                
-                plt.subplot(1, 3, 1)
-                # For visualization, always show RGB for better visual appeal
-                plt.imshow(rendered_rgb)
-                plt.title('Predicted Density (RGB)')
-                plt.colorbar(label=f'Density (kg/m³) [{cmap_min:.1f} - {cmap_max:.1f}]')
-                
-                plt.subplot(1, 3, 2)
-                plt.imshow(gt_data, cmap='inferno')
-                plt.title('Ground Truth Density')
-                plt.colorbar(label=f'Density (kg/m³) [{gt_vmin:.1f} - {gt_vmax:.1f}]')
-                
-                plt.subplot(1, 3, 3)
-                # Scale for difference visualization
-                # Always use the single-valued density for difference calculation
-                display_rendered = rendered_density
-                        
-                norm_rendered = (display_rendered - display_rendered.min()) / (display_rendered.max() - display_rendered.min() + 1e-8)
-                norm_gt = (gt_data - gt_data.min()) / (gt_data.max() - gt_data.min() + 1e-8)
-                diff = np.abs(norm_rendered - norm_gt)
-                plt.imshow(diff, cmap='plasma')
-                plt.title('Absolute Difference')
-                plt.colorbar(label='Normalized Difference')
-                
-                plt.tight_layout()
-                plt.savefig(os.path.join(output_dir, f'density_comparison_view_{view_idx}.png'))
-                plt.close()
+                # Store GT data for grid visualization
+                gt_data_list.append((view_idx, gt_data))
                 
                 # Print metrics
                 print(f"Metrics for view {view_idx}:")
                 for metric_name, value in metrics.items():
                     print(f"  {metric_name}: {value:.4f}")
+    
+    # Create 3x3 grid visualization of predicted density
+    if rendered_data:
+        # Sort by view index and sample every 3rd view until we get 9 views
+        rendered_data.sort(key=lambda x: x[0])
+        sampled_views = rendered_data[::max(1, len(rendered_data) // 9)][:9]
+        
+        # If we have fewer than 9 views, use all available views
+        if len(sampled_views) < 9:
+            sampled_views = rendered_data[:min(9, len(rendered_data))]
+        
+        # Create the grid
+        fig, axes = plt.subplots(3, 3, figsize=(15, 15))
+        axes = axes.flatten()
+        
+        for i, (view_idx, rgb, nonzero_density) in enumerate(sampled_views):
+            if i < 9:  # Ensure we don't exceed the grid size
+                ax = axes[i]
+                im = ax.imshow(nonzero_density, cmap='jet', interpolation='none')
+                ax.set_title(f'View {view_idx}')
+                ax.axis('off')
+        
+        # Hide any unused subplots
+        for i in range(len(sampled_views), 9):
+            axes[i].axis('off')
+        
+        # Add a colorbar for the entire figure
+        fig.subplots_adjust(right=0.85)
+        cbar_ax = fig.add_axes([0.88, 0.15, 0.03, 0.7])
+        fig.colorbar(im, cax=cbar_ax, label=f'Density (kg/m³) [{cmap_min:.1f} - {cmap_max:.1f}]')
+        
+        plt.suptitle('Predicted Density - Sample Views', fontsize=16)
+        plt.tight_layout(rect=[0, 0, 0.85, 0.95])
+        plt.savefig(os.path.join(output_dir, 'predicted_density_grid.png'))
+        plt.close()
+    
+    # Create 3x3 grid visualization of ground truth comparison if available
+    if perform_evaluation and gt_data_list:
+        # Sort by view index and sample every 3rd view until we get 9 views
+        gt_data_list.sort(key=lambda x: x[0])
+        rendered_data.sort(key=lambda x: x[0])
+        
+        # Find views that have both rendered and GT data
+        common_views = []
+        for view_idx, gt_data in gt_data_list:
+            for r_view_idx, rgb, _ in rendered_data:
+                if view_idx == r_view_idx:
+                    common_views.append((view_idx, rgb, gt_data))
+                    break
+        
+        # Sample views
+        sampled_views = common_views[::max(1, len(common_views) // 9)][:9]
+        
+        # If we have fewer than 9 views, use all available views
+        if len(sampled_views) < 9:
+            sampled_views = common_views[:min(9, len(common_views))]
+        
+        # Create the grid
+        fig, axes = plt.subplots(3, 3, figsize=(15, 15))
+        axes = axes.flatten()
+        
+        for i, (view_idx, rgb, gt_data) in enumerate(sampled_views):
+            if i < 9:  # Ensure we don't exceed the grid size
+                ax = axes[i]
+                
+                # Create a side-by-side comparison
+                norm_rendered = (rgb - rgb.min()) / (rgb.max() - rgb.min() + 1e-8)
+                norm_gt = (gt_data - gt_data.min()) / (gt_data.max() - gt_data.min() + 1e-8)
+                
+                # Combine into a single image with a dividing line
+                comparison = np.zeros((norm_rendered.shape[0], norm_rendered.shape[1] * 2, 3))
+                comparison[:, :norm_rendered.shape[1]] = norm_rendered
+                
+                # Convert gt_data to RGB if it's single channel
+                if len(norm_gt.shape) == 2:
+                    cmap = plt.get_cmap('inferno')
+                    norm_gt_rgb = cmap(norm_gt)
+                    norm_gt_rgb = norm_gt_rgb[:, :, :3]  # Remove alpha channel
+                else:
+                    norm_gt_rgb = norm_gt
+                
+                comparison[:, norm_rendered.shape[1]:] = norm_gt_rgb
+                
+                # Add a vertical line to separate the images
+                comparison[:, norm_rendered.shape[1]-1:norm_rendered.shape[1]+1] = [1, 1, 1]  # White line
+                
+                ax.imshow(comparison)
+                ax.set_title(f'View {view_idx}')
+                ax.axis('off')
+        
+        # Hide any unused subplots
+        for i in range(len(sampled_views), 9):
+            axes[i].axis('off')
+        
+        plt.suptitle('Comparison: Predicted (Left) vs Ground Truth (Right)', fontsize=16)
+        plt.tight_layout(rect=[0, 0, 1, 0.95])
+        plt.savefig(os.path.join(output_dir, 'gt_comparison_grid.png'))
+        plt.close()
     
     # Save all metrics
     if all_metrics:
@@ -452,6 +504,58 @@ def run_density_evaluation(args):
         
         with open(os.path.join(output_dir, 'density_metrics_avg.json'), 'w') as f:
             json.dump(avg_metrics, f, indent=4)
+        
+        # Generate histograms for each evaluation metric across all views and scenes
+        if args.all_metrics:
+            # Extract metrics for histogram generation
+            metrics_by_type = {}
+            for metric_type in ['ADE', 'ALDE', 'APE', 'MnRE']:
+                metrics_by_type[metric_type] = [metrics[metric_type] for metrics in all_metrics.values()]
+            
+            # Create histograms for each metric type across all views
+            plt.figure(figsize=(15, 10))
+            for i, (metric_name, values) in enumerate(metrics_by_type.items(), 1):
+                plt.subplot(2, 2, i)
+                plt.hist(values, bins=10, alpha=0.7)
+                plt.title(f'{metric_name} Distribution Across All Views')
+                plt.xlabel(metric_name)
+                plt.ylabel('Frequency')
+                plt.axvline(np.mean(values), color='r', linestyle='dashed', linewidth=1, label=f'Mean: {np.mean(values):.4f}')
+                plt.legend()
+            
+            plt.tight_layout()
+            plt.savefig(os.path.join(output_dir, 'metrics_histograms_all_views.png'))
+            plt.close()
+            
+            # If we have multiple scenes, generate histograms for metrics averaged across views per scene
+            # For a single scene, this is the same as the average metrics
+            if len(args.scene_name.split(',')) > 1:
+                # Group metrics by scene
+                scene_metrics = {}
+                for scene_name in args.scene_name.split(','):
+                    scene_metrics[scene_name] = {}
+                    for metric_type in ['ADE', 'ALDE', 'APE', 'MnRE']:
+                        scene_views = [v for k, v in all_metrics.items() if scene_name in k]
+                        if scene_views:
+                            scene_metrics[scene_name][metric_type] = np.mean([v[metric_type] for v in scene_views])
+                
+                # Create histograms for each metric type across scenes (averaged across views)
+                plt.figure(figsize=(15, 10))
+                for i, metric_name in enumerate(['ADE', 'ALDE', 'APE', 'MnRE'], 1):
+                    values = [metrics[metric_name] for metrics in scene_metrics.values() if metric_name in metrics]
+                    if values:
+                        plt.subplot(2, 2, i)
+                        plt.bar(list(scene_metrics.keys()), values, alpha=0.7)
+                        plt.title(f'Average {metric_name} Across Scenes')
+                        plt.xlabel('Scene')
+                        plt.ylabel(metric_name)
+                        plt.xticks(rotation=45, ha='right')
+                        plt.axhline(np.mean(values), color='r', linestyle='dashed', linewidth=1, label=f'Mean: {np.mean(values):.4f}')
+                        plt.legend()
+                
+                plt.tight_layout()
+                plt.savefig(os.path.join(output_dir, 'metrics_histograms_by_scene.png'))
+                plt.close()
     
     print(f"Density evaluation complete. Results saved to {output_dir}")
 
