@@ -276,10 +276,10 @@ def create_contextual_difference_grid(common_views, output_dir):
         ax.axis('off')
 
         # Show grayscale GT as base
-        ax.imshow(gt, cmap='gray', alpha=0.1)
+        im = ax.imshow(gt, cmap='gray', alpha=0.1, interpolation='none')
 
         # Overlay difference heatmap
-        im = ax.imshow(diff, cmap=cmap, norm=norm, alpha=1.0)
+        im = ax.imshow(diff, cmap=cmap, norm=norm, alpha=1.0, interpolation='none')
 
     for i in range(len(sampled_diffs), 9):
         axes[i].axis('off')
