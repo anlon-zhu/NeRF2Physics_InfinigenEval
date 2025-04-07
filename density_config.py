@@ -96,7 +96,7 @@ class VisualizationConfig:
     """Configuration for visualization parameters"""
     
     # Default colormap for density visualization
-    DENSITY_COLORMAP = 'viridis'
+    DENSITY_COLORMAP = 'jet'
     DIFF_COLORMAP = 'inferno'
     MASK_COLORMAP = 'binary'
     
@@ -126,7 +126,7 @@ class EvaluationConfig:
     
     # Default colormap range for density visualization
     DEFAULT_CMAP_MIN = 0
-    DEFAULT_CMAP_MAX = 5000  # kg/m³
+    DEFAULT_CMAP_MAX = 3000  # kg/m³
     
     # Image resolution for rendering
     DEFAULT_IMAGE_RESOLUTION = (720, 1080)  # (height, width)
