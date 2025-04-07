@@ -168,6 +168,7 @@ def evaluate_density(rendered_density, rendered_rgb, gt_density, gt_vmin, gt_vma
             'ADE': ADE(safe_pred, safe_gt),
             'ALDE': ALDE(safe_pred, safe_gt),
             'APE': APE(safe_pred, safe_gt),
+            'MedADE': MedADE(safe_pred, safe_gt),
             'MnRE': MnRE(safe_pred, safe_gt)
         }
     except Exception as e:
@@ -324,7 +325,7 @@ def plot_metrics_histograms(all_metrics, output_dir):
     Plot histograms of each metric (ADE, ALDE, APE, MnRE) across all views.
     """
     metrics_by_type = {metric: [m[metric] for m in all_metrics.values()]
-                       for metric in ['ADE', 'ALDE', 'APE', 'MnRE']}
+                       for metric in ['ADE', 'ALDE', 'MedADE', 'MnRE']}
     
     plt.figure(figsize=(15, 10))
     for i, (metric_name, values) in enumerate(metrics_by_type.items(), 1):

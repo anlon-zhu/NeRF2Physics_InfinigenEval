@@ -17,6 +17,10 @@ def APE(preds, gts):
     ape = np.abs(preds - gts) / gts
     return np.mean(ape)
 
+def MedADE(preds, gts):
+    ade = np.abs(preds - gts)
+    return np.median(ade)
+
 def MnRE(preds, gts):
     p_over_t = preds / gts
     t_over_p = gts / preds
