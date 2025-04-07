@@ -261,11 +261,8 @@ def create_contextual_difference_grid(common_views, output_dir):
         sampled_diffs = diff_images[:min(9, len(diff_images))]
 
     # Compute global max diff for consistent normalization
+    cmap = plt.cm.get_cmap('plasma')  # or 'turbo' / 'plasma' for brightness
     global_max_diff = max(np.nanmax(np.abs(diff)) for _, diff, _ in sampled_diffs)
-    if global_max_diff == 0:
-        global_max_diff = 1
-
-    cmap = plt.cm.get_cmap('seismic')  # or 'turbo' / 'plasma' for brightness
     norm = plt.Normalize(vmin=-global_max_diff, vmax=global_max_diff)
 
     fig, axes = plt.subplots(3, 3, figsize=(15, 15))
@@ -277,11 +274,11 @@ def create_contextual_difference_grid(common_views, output_dir):
         ax.axis('off')
 
         # Gray GT background with low alpha
-
+        valid_mask = ~np.isnan(diff)
         gray_gt = plt.cm.gray(gt)
-        gray_gt[..., 3] = 0.3
-        gray_gt[pred > 0] = np.nan
-        ax.imshow(gray_gt)
+        # Gray_gt should not show where diff is valid
+        gray_gt[valid_mask] = np.nan
+        ax.imshow(gray_gt, alpha=0.3)
 
         # Overlay the diff heatmap
         im = ax.imshow(diff, cmap=cmap, norm=norm)
