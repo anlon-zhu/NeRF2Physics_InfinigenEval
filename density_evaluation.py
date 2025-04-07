@@ -320,7 +320,8 @@ def create_difference_grid(common_views, output_dir, cmap_min, cmap_max):
     if len(sampled_diffs) < 9:
         sampled_diffs = diff_images[:min(9, len(diff_images))]
     
-    global_max_diff = max([np.max(np.abs(diff), where=~np.isnan(diff)) for _, diff in sampled_diffs])
+    global_max_diff = max([np.max(np.abs(diff), where=~np.isnan(diff), initial=0) for _, diff in sampled_diffs])
+
     if global_max_diff == 0:
         global_max_diff = 1
     
