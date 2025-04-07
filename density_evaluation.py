@@ -288,7 +288,12 @@ def create_difference_grid(common_views, output_dir, cmap_min, cmap_max):
     diff_images = []
     for view_idx, pred, gt_data in common_views:
         diff = pred - gt_data
-        diff[pred == 0] = np.nan
+
+        breakpoint()
+
+        # prediction mask
+        pred_mask = (pred == 0)
+        diff[pred_mask] = np.nan
         diff_images.append((view_idx, diff))
     
     sampled_diffs = diff_images[::max(1, len(diff_images) // 9)][:9]

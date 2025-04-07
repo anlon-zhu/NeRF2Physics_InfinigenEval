@@ -78,12 +78,12 @@ def create_aggregate_metrics_table(scene_metrics):
     # Extract metrics into arrays
     ade_values = [m.get('ADE', 0) for m in scene_metrics.values() if m is not None]
     alde_values = [m.get('ALDE', 0) for m in scene_metrics.values() if m is not None]
-    ape_values = [m.get('APE', 0) for m in scene_metrics.values() if m is not None]
+    ape_values = [m.get('MedADE', 0) for m in scene_metrics.values() if m is not None]
     mnre_values = [m.get('MnRE', 0) for m in scene_metrics.values() if m is not None]
     
     # Create DataFrame for the table
     data = {
-        'Metric': ['ADE', 'ALDE', 'APE', 'MnRE'],
+        'Metric': ['ADE', 'ALDE', 'MedADE', 'MnRE'],
         'Mean (All Scenes)': [
             np.mean(ade_values),
             np.mean(alde_values),
@@ -103,12 +103,7 @@ def create_aggregate_metrics_table(scene_metrics):
     # Format the table for display
     df['Mean (All Scenes)'] = df['Mean (All Scenes)'].map(lambda x: f"{x:.2f}")
     df['Std. Dev. (All Scenes)'] = df['Std. Dev. (All Scenes)'].map(lambda x: f"± {x:.2f}")
-    
-    # Special handling for APE (percentage)
-    if 'APE' in df['Metric'].values:
-        idx = df.index[df['Metric'] == 'APE'].tolist()[0]
-        df.at[idx, 'Mean (All Scenes)'] = f"{float(df.at[idx, 'Mean (All Scenes)']):.2f}%"
-    
+
     # Save as CSV
     df.to_csv('metrics_summary_table.csv', index=False)
     
