@@ -59,16 +59,14 @@ def predict_candidate_materials(args, scene_dir, show=False):
     gpt_fn = lambda seed: gpt_candidate_materials(caption, property_name=args.property_name, 
                                                   model_name=args.gpt_model_name, seed=seed)
     parse_fn = parse_material_hardness if args.property_name == 'hardness' else parse_material_list
-    # gpt_wrapper now returns the parsed result (mat_names, mat_vals)
-    mat_names, mat_vals = gpt_wrapper(gpt_fn, parse_fn)
+    candidate_materials = gpt_wrapper(gpt_fn, parse_fn)
 
-    # Store both the parsed result and the raw string for compatibility
-    candidate_materials_raw = None  # We don't have the raw string anymore
-    info['candidate_materials_%s' % args.property_name] = (mat_names, mat_vals)
+    info['candidate_materials_%s' % args.property_name] = candidate_materials
     
     print('-' * 50)
     print('scene: %s, info:' % os.path.basename(scene_dir), info)
     print('candidate materials (%s):' % args.property_name)
+    mat_names, mat_vals = parse_fn(candidate_materials)
     for mat_i, mat_name in enumerate(mat_names):
         print('%16s: %8.1f -%8.1f' % (mat_name, mat_vals[mat_i][0], mat_vals[mat_i][1]))
     if show:
@@ -132,14 +130,12 @@ def predict_thickness(args, scene_dir, mode='list', show=False):
 
     gpt_fn = lambda seed: gpt_thickness(caption, candidate_materials, 
                                         model_name=args.gpt_model_name,  mode=mode, seed=seed)
-    # gpt_wrapper now returns the parsed result (mat_names, mat_vals)
-    mat_names, mat_vals = gpt_wrapper(gpt_fn, parse_material_list)
+    thickness = gpt_wrapper(gpt_fn, parse_material_list)
 
-    # Store the parsed result in a format that can be serialized to JSON
-    thickness_raw = None  # We don't have the raw string anymore
-    info['thickness'] = mat_names, mat_vals  # Store as tuple of lists
+    info['thickness'] = thickness
     
     print('thickness (cm):')
+    mat_names, mat_vals = parse_material_list(thickness)
     for mat_i, mat_name in enumerate(mat_names):
         print('%16s: %8.1f -%8.1f' % (mat_name, mat_vals[mat_i][0], mat_vals[mat_i][1]))
     if show:
