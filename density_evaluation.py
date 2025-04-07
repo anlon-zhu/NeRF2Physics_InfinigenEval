@@ -195,13 +195,13 @@ def evaluate_density_against_gt(rendered_density, rendered_rgb, gt_density, gt_v
         # 1. Exclude -1 values in ground truth (indicates missing data)
         # 2. Use less restrictive thresholds to capture more pixels
         # 3. Print a debug message about the full range of values where GT is valid
-        valid_gt_mask = (gt_values != -1) & (gt_values > 0)
+        valid_gt_mask = gt_values > 0
         if np.any(valid_gt_mask):
             print(f"DEBUG: Where GT is valid, rendered values range: [{np.min(pixel_values[valid_gt_mask]):.4f}, {np.max(pixel_values[valid_gt_mask]):.4f}]")
             print(f"DEBUG: Number of GT valid pixels: {np.sum(valid_gt_mask)}")
         
         # For evaluation, we'll use pixels where either has a meaningful value
-        valid_mask = (gt_values != -1) & ((gt_values > 0) | (pixel_values > 0))
+        valid_mask = valid_gt_mask & (pixel_values > 0)
         valid_pred = pixel_values[valid_mask]
         valid_gt = gt_values[valid_mask]
         
@@ -221,17 +221,14 @@ def evaluate_density_against_gt(rendered_density, rendered_rgb, gt_density, gt_v
         epsilon = 1e-8
         safe_pred = np.maximum(valid_pred, epsilon)
         safe_gt = np.maximum(valid_gt, epsilon)
-            
-        # Format for metrics
-        valid_pred_ranges = np.stack([safe_pred * 0.8, safe_pred * 1.2], axis=1)  # Create min-max ranges
-            
+                        
         # Calculate metrics with additional error handling
         try:
             metrics = {
-                'ADE': ADE(valid_pred_ranges, safe_gt),
-                'ALDE': ALDE(valid_pred_ranges, safe_gt),
-                'APE': APE(valid_pred_ranges, safe_gt),
-                'MnRE': MnRE(valid_pred_ranges, safe_gt)
+                'ADE': ADE(safe_pred, safe_gt),
+                'ALDE': ALDE(safe_pred, safe_gt),
+                'APE': APE(safe_pred, safe_gt),
+                'MnRE': MnRE(safe_pred, safe_gt)
             }
         except Exception as e:
             print(f"WARNING: Error computing metrics: {e}")
