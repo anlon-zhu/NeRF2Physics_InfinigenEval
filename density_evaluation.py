@@ -440,25 +440,21 @@ def run_density_evaluation(args):
         # Create the grid
         fig, axes = plt.subplots(3, 3, figsize=(15, 15))
         axes = axes.flatten()
+        cmap = plt.get_cmap(VisualizationConfig.DENSITY_COLORMAP)
+        
         for i, (view_idx, pred, gt_data) in enumerate(sampled_views):
             if i < 9:
                 ax = axes[i]
                 
                 # For the predicted density: mask non-points (0 values) and set them to black
                 pred_mask = (pred == 0)
-                # Normalize using the same colormap scale (do not perform per-image norming)
-                norm_pred = (pred - cmap_min) / (cmap_max - cmap_min)
-                norm_gt = (gt_data - cmap_min) / (cmap_max - cmap_min)
-                norm_pred = np.clip(norm_pred, 0, 1)
-                norm_gt = np.clip(norm_gt, 0, 1)
-                
-                pred_colors = plt.cm.jet(norm_pred)
-                gt_colors = plt.cm.jet(norm_gt)
+                pred_colors = cmap(pred)
+                gt_colors = cmap(gt_data)
                 # Set non-point areas in the predicted image
                 pred_colors[pred_mask] = [1, 1, 1, 1]
                 # Set the non-point areas in the gt to the same color as the gt but lower alpha
                 gt_colors[pred_mask, :3] = gt_colors[pred_mask, :3]  # Keep RGB values
-                gt_colors[pred_mask, 3] = 0.5  # Set alpha to 0.5
+                gt_colors[pred_mask, 3] = 0.2  # Set alpha to 0.5
                 
                 # Stack the images vertically: predicted on top, GT on bottom
                 combined = np.vstack([pred_colors, gt_colors])
