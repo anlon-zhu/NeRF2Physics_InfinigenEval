@@ -252,7 +252,7 @@ def create_contextual_difference_grid(common_views, output_dir):
     """
     diff_images = []
     for view_idx, pred, gt_data in common_views:
-        diff = np.abs(pred - gt_data)
+        diff = np.log(1 + pred) - np.log(1 + gt_data)
         diff[pred == 0] = np.nan
         diff_images.append((view_idx, diff, gt_data))
 
@@ -260,12 +260,7 @@ def create_contextual_difference_grid(common_views, output_dir):
     if len(sampled_diffs) < 9:
         sampled_diffs = diff_images[:min(9, len(diff_images))]
 
-    # Compute log differences and global max
-    log_diffs = []
-    for _, diff, _ in sampled_diffs:
-        log_diffs.append(np.log10(1 + diff))  # log(1 + x) avoids log(0)
-
-    global_max_log = max(np.nanmax(ld) for ld in log_diffs)
+    global_max_log = max(np.nanmax(diff) for _, diff, _ in sampled_diffs)
     norm = plt.Normalize(vmin=0, vmax=global_max_log)
     cmap = plt.cm.get_cmap('turbo')
 
@@ -274,7 +269,7 @@ def create_contextual_difference_grid(common_views, output_dir):
 
     for i, ((view_idx, _, gt), log_diff) in enumerate(zip(sampled_diffs, log_diffs)):
         ax = axes[i]
-        ax.set_title(f"View {view_idx} | log(|Pred - GT|)")
+        ax.set_title(f"View {view_idx} | log(Pred) -log(GT)")
         ax.axis('off')
 
         # GT background
@@ -292,7 +287,7 @@ def create_contextual_difference_grid(common_views, output_dir):
 
     plt.suptitle("Log Difference Overlayed on GT", fontsize=16)
     plt.tight_layout(rect=[0, 0, 0.85, 0.95])
-    plt.savefig(os.path.join(output_dir, "log_difference_grid.png"))
+    plt.savefig(os.path.join(output_dir, "contextual_difference_grid.png"))
     plt.close()
 
 def plot_metrics_histograms(all_metrics, output_dir):
