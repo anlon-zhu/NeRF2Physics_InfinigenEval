@@ -248,6 +248,7 @@ def create_comparisons(gt_data_list, predicted_density_list):
 def create_contextual_difference_grid(common_views, output_dir):
     """
     3x3 grid showing predicted - GT difference maps overlayed on dimmed GT background.
+    Uses perceptual contrast stretching to brighten small differences.
     """
     diff_images = []
     for view_idx, pred, gt_data in common_views:
@@ -259,15 +260,16 @@ def create_contextual_difference_grid(common_views, output_dir):
     if len(sampled_diffs) < 9:
         sampled_diffs = diff_images[:min(9, len(diff_images))]
 
-    # Stack all diffs for percentile clipping
+    # Stack diffs and clip outliers
     all_diffs = np.concatenate([diff.flatten() for _, diff, _ in sampled_diffs])
     all_diffs = all_diffs[~np.isnan(all_diffs)]
 
-    vmin, vmax = np.percentile(all_diffs, [10, 90])  # clip extremes
+    vmin, vmax = np.percentile(all_diffs, [1, 99])
     if vmin == vmax:
-        vmin, vmax = -1, 1  # fallback
+        vmin, vmax = -1, 1
 
-    cmap = plt.cm.get_cmap("seismic")  # for signed differences
+    # Use a perceptually bright colormap and apply contrast stretching
+    cmap = plt.cm.get_cmap("seismic")
     norm = plt.Normalize(vmin=vmin, vmax=vmax)
 
     fig, axes = plt.subplots(3, 3, figsize=(15, 15))
@@ -278,11 +280,13 @@ def create_contextual_difference_grid(common_views, output_dir):
         ax.set_title(f"View {view_idx} | Pred - GT")
         ax.axis('off')
 
-        # Show grayscale GT as base
-        ax.imshow(gt, cmap='gray', alpha=0.5)
+        # Show GT background at low alpha
+        ax.imshow(gt, cmap='gray', alpha=0.2)
 
-        # Overlay difference heatmap
-        im = ax.imshow(diff, cmap=cmap, norm=norm, alpha=0.9)
+        # Apply contrast stretch to differences
+        stretched_diff = np.sign(diff) * (np.abs(diff) ** 0.5)
+
+        im = ax.imshow(stretched_diff, cmap=cmap, norm=norm, alpha=1.0)
 
     for i in range(len(sampled_diffs), 9):
         axes[i].axis('off')
