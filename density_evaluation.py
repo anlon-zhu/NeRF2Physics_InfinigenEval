@@ -275,7 +275,7 @@ def create_contextual_difference_grid(common_views, output_dir, cmap_min, cmap_m
     
     fig, axes = plt.subplots(3, 3, figsize=(15, 15))
     axes = axes.flatten()
-    for i, (view_idx, diff, gt) in enumerate(sampled):
+    for i, (view_idx, diff, gt) in enumerate(sampled_diffs):
         ax = axes[i]
         ax.set_title(f"View {view_idx} | Pred - GT")
         ax.axis('off')
@@ -295,7 +295,7 @@ def create_contextual_difference_grid(common_views, output_dir, cmap_min, cmap_m
         )
 
     # Turn off unused subplots
-    for i in range(len(sampled), 9):
+    for i in range(len(sampled_diffs), 9):
         axes[i].axis('off')
 
     # Add colorbar
@@ -308,7 +308,7 @@ def create_contextual_difference_grid(common_views, output_dir, cmap_min, cmap_m
     plt.savefig(os.path.join(output_dir, "contextual_difference_grid.png"))
     plt.close()
 
-def create_difference_grid(common_views, output_dir, cmap_min, cmap_max):
+def create_difference_grid(common_views, output_dir):
     """
     Create a grid showing the difference (predicted - GT) for each view.
     """
