@@ -36,7 +36,7 @@ def gpt_wrapper(gpt_fn, parse_fn, max_tries=10, sleep_time=3):
             result = parse_fn(gpt_response)
         except:
             result = None
-    return gpt_response
+    return result
 
 
 def show_img_to_caption(scene_dir, idx_to_caption):
