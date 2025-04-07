@@ -233,6 +233,18 @@ def create_grid_visualization(rendered_data, output_dir, cmap_min, cmap_max):
     plt.close()
 
 
+def create_comparisons(gt_data_list, predicted_density_list):
+    """
+    Create a grid comparing predicted (top) and ground truth (bottom) density images.
+    Returns a list of common views as tuples: (view_idx, predicted, gt)
+    """
+    # Create dictionaries for quick lookup
+    gt_dict = {view_idx: gt for view_idx, gt in gt_data_list}
+    pred_dict = {view_idx: pred for view_idx, pred in predicted_density_list}
+    common_views = [(view_idx, pred_dict[view_idx], gt_dict[view_idx])
+                    for view_idx in sorted(set(gt_dict.keys()) & set(pred_dict.keys()))] 
+    return common_views
+
 def create_contextual_difference_grid(common_views, output_dir, cmap_min, cmap_max):
     """
     Create a 3x3 grid showing predicted - GT difference maps, overlayed on the GT
@@ -291,7 +303,6 @@ def create_contextual_difference_grid(common_views, output_dir, cmap_min, cmap_m
     plt.tight_layout(rect=[0, 0, 0.85, 0.95])
     plt.savefig(os.path.join(output_dir, "contextual_difference_grid.png"))
     plt.close()
-
 
 def create_difference_grid(common_views, output_dir, cmap_min, cmap_max):
     """
@@ -488,11 +499,9 @@ def run_density_evaluation(args):
     if rendered_data:
         create_grid_visualization(rendered_data, output_dir, cmap_min, cmap_max)
     
-    common_views = None
-    if perform_evaluation and gt_data_list and predicted_density_list:
-        common_views = create_contextual_difference_grid(common_views, output_dir, cmap_min, cmap_max)
-    
+    common_views = create_comparisons(gt_data_list, predicted_density_list)
     if perform_evaluation and common_views:
+        create_contextual_difference_grid(common_views, output_dir, cmap_min, cmap_max)
         create_difference_grid(common_views, output_dir, cmap_min, cmap_max)
     
     if all_metrics:
