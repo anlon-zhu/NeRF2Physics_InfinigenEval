@@ -490,7 +490,7 @@ def run_density_evaluation(args):
     
     common_views = None
     if perform_evaluation and gt_data_list and predicted_density_list:
-        common_views = create_contextual_difference_grid(gt_data_list, predicted_density_list, output_dir, cmap_min, cmap_max)
+        common_views = create_contextual_difference_grid(common_views, output_dir, cmap_min, cmap_max)
     
     if perform_evaluation and common_views:
         create_difference_grid(common_views, output_dir, cmap_min, cmap_max)
