@@ -265,7 +265,7 @@ def create_contextual_difference_grid(common_views, output_dir):
     # Normalize so that most points fall within the middle of the color range
     vmin, vmax = np.percentile(all_diffs, [1, 99])
     norm = plt.Normalize(vmin=vmin, vmax=vmax)
-    cmap = plt.cm.get_cmap("bwr")  # for signed differences
+    cmap = plt.cm.get_cmap("rdylbu")  # for signed differences
 
     fig, axes = plt.subplots(3, 3, figsize=(15, 15))
     axes = axes.flatten()
