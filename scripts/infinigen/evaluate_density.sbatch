@@ -24,39 +24,18 @@ DATA_DIR=$1
 # Set up environment variables
 export HF_HOME=/n/fs/scratch/${USER}/nerf2physics/hf_cache
 export TORCH_HOME=/n/fs/scratch/${USER}/nerf2physics/torch_cache
-# Set TCNN CUDA architectures for optimal performance
-# Use 60;61 for P100 GPUs, or 75;86 for RTX 2080/3090 GPUs
-export TCNN_CUDA_ARCHITECTURES="75;86"  # Adjust as needed
 export OPEN3D_HEADLESS_RENDERING=ON
-
-# Make sure there's enough space for shader cache
-export XDG_CACHE_HOME="/tmp/${USER}_cache"
-mkdir -p $XDG_CACHE_HOME
 
 # Activate conda environment
 module load anaconda3
 export PATH=/n/fs/vl/anlon/envs/nerf2phy/bin:$PATH
 
-
 # Navigate to the directory
-cd /n/fs/pvl-progen/anlon/NeRF2Physics_InfinigenEval
 echo "[$(date)] Starting batch density evaluation (Array Job ${SLURM_ARRAY_TASK_ID})"
 START_TIME=$(date +%s)
 
 # Create scene list if it doesn't exist
 SCENE_LIST_FILE="${DATA_DIR}/scene_list.txt"
-if [ ! -f "${SCENE_LIST_FILE}" ]; then
-    echo "Scene list file not found, creating it now..."
-    SCENES_DIR="${DATA_DIR}/scenes"
-    if [ ! -d "${SCENES_DIR}" ]; then
-        echo "Error: Scenes directory not found at ${SCENES_DIR}"
-        exit 1
-    fi
-    
-    # Find all directories in the scenes directory
-    find "${SCENES_DIR}" -maxdepth 1 -type d -not -path "${SCENES_DIR}" -exec basename {} \; > "${SCENE_LIST_FILE}"
-    echo "Created scene list with $(wc -l < "${SCENE_LIST_FILE}") scenes"
-fi
 
 # Read scenes into an array
 SCENE_NAMES=($(cat "${SCENE_LIST_FILE}"))
@@ -86,14 +65,6 @@ for (( i=${START_IDX}; i<=${END_IDX}; i++ )); do
     SCENE_NAME=${SCENE_NAMES[$i]}
     
     echo "\n[$(date)] Processing scene ${i}/${END_IDX}: ${SCENE_NAME}"
-    
-    # Check if ground truth density directory exists
-    GT_DIR="${DATA_DIR}/scenes/${SCENE_NAME}/gt_density"
-    if [ ! -d "$GT_DIR" ]; then
-        echo "[WARNING] Ground truth density directory not found: $GT_DIR"
-        echo "Skipping this scene. Run copy_density_files.sh first to prepare ground truth data."
-        continue
-    fi
     
     # Run density evaluation on this scene
     python density_evaluation.py \
