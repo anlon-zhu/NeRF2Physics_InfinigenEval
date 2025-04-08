@@ -77,6 +77,7 @@ def create_grid_image(scene_dirs, view_idx, mode, cmap, filename, label, grid_si
     rows, cols = grid_size
     max_items = rows * cols
     images, labels = [], []
+    gt_refs = []
 
     for d in scene_dirs:
         pred = load_density_map(d, view_idx)
@@ -88,8 +89,9 @@ def create_grid_image(scene_dirs, view_idx, mode, cmap, filename, label, grid_si
             elif mode == 'diff' and gt is not None and pred.shape == gt.shape:
                 diff = np.abs(pred - gt)
                 diff[pred == 0] = np.nan
-                images.append((diff, gt))
+                images.append(diff)
                 labels.append(os.path.basename(d))
+                gt_refs.append(gt)
             elif mode == 'mask':
                 mask = (pred > 0).astype(np.float32)
                 images.append(mask)
@@ -113,11 +115,11 @@ def create_grid_image(scene_dirs, view_idx, mode, cmap, filename, label, grid_si
             custom_cmap = ListedColormap(cmap_data)
             im = ax.imshow(img, cmap=custom_cmap, vmin=vmin, vmax=vmax, interpolation='none')
         elif mode == 'diff':
-            diff, gt = img
+            gt = gt_refs[images.index(img)]
             im = ax.imshow(gt, cmap='gray', alpha=1.0)
             # add a dark overlay
             im = ax.imshow(np.zeros_like(gt), cmap='gray', alpha=0.8, interpolation='none')
-            im = ax.imshow(diff, cmap=cmap, vmin=vmin, vmax=vmax, interpolation='none')
+            im = ax.imshow(img, cmap=cmap, vmin=vmin, vmax=vmax, interpolation='none')
         ax.set_title(title, fontsize=6)
         ax.axis('off')
 
