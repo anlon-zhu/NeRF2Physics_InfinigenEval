@@ -88,7 +88,7 @@ def create_grid_image(scene_dirs, view_idx, mode, cmap, filename, label, grid_si
             elif mode == 'diff' and gt is not None and pred.shape == gt.shape:
                 diff = np.abs(pred - gt)
                 diff[pred == 0] = np.nan
-                images.append(diff)
+                images.append((diff, gt))
                 labels.append(os.path.basename(d))
             elif mode == 'mask':
                 mask = (pred > 0).astype(np.float32)
@@ -113,10 +113,11 @@ def create_grid_image(scene_dirs, view_idx, mode, cmap, filename, label, grid_si
             custom_cmap = ListedColormap(cmap_data)
             im = ax.imshow(img, cmap=custom_cmap, vmin=vmin, vmax=vmax, interpolation='none')
         elif mode == 'diff':
-            im = ax.imshow(gt, cmap='gray', alpha=0.3)
+            diff, gt = img
+            im = ax.imshow(gt, cmap='gray', alpha=1.0)
             # add a dark overlay
-            im = ax.imshow(np.zeros_like(gt), cmap='gray', alpha=0.2, interpolation='none')
-            im = ax.imshow(img, cmap=cmap, vmin=vmin, vmax=vmax, interpolation='none')
+            im = ax.imshow(np.zeros_like(gt), cmap='gray', alpha=0.8, interpolation='none')
+            im = ax.imshow(diff, cmap=cmap, vmin=vmin, vmax=vmax, interpolation='none')
         ax.set_title(title, fontsize=6)
         ax.axis('off')
 
@@ -125,7 +126,7 @@ def create_grid_image(scene_dirs, view_idx, mode, cmap, filename, label, grid_si
         ax.axis('off')
 
     # Adjust spacing
-    fig.subplots_adjust(wspace=0.05, hspace=0.05, right=0.9)
+    fig.subplots_adjust(wspace=0.05, hspace=0.01, right=0.9)
 
     # Colorbar (skip for mask)
     if mode != 'mask':
