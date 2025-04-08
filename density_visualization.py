@@ -156,7 +156,6 @@ def main():
     parser = ArgumentParser()
     parser.add_argument('--data_dir', type=str, required=True)
     parser.add_argument('--output_dir', type=str, default='.')
-    parser.add_argument('--case_study_scene', type=str, default='scene_42')
     parser.add_argument('--view_idx', type=int, default=0)
     args = parser.parse_args()
 

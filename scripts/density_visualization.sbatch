@@ -55,7 +55,6 @@ START_TIME=$(date +%s)
 python density_visualization.py \
     --data_dir $DATA_DIR \
     --output_dir $OUTPUT_DIR \
-    --case_study_scene $CASE_STUDY_SCENE \
     --view_idx 0
 
 # Record end time and calculate duration
