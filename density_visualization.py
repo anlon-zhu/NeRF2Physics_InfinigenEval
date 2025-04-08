@@ -170,6 +170,7 @@ def main():
 
     create_metrics_summary(scene_metrics)
     create_metrics_violinplot(scene_metrics)
+    create_scenewise_bar(scene_metrics, metric='MnRE')
     create_scenewise_bar(scene_metrics, metric='ADE')
     create_scenewise_bar(scene_metrics, metric='MedADE')
 
