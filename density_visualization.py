@@ -64,7 +64,7 @@ def create_metrics_summary(scene_metrics):
     for m in metrics:
         vals = [s.get(m, 0) for s in scene_metrics.values() if s is not None]
         agg = np.median(vals) if m == 'MedADE' else np.mean(vals)
-        q75, q25 = np.quantile(vals, [0.75, 0.25])
+        q75, q25 = np.nanquantile(vals, [0.75, 0.25])
         iqr = q75 - q25
         spread = iqr if m == 'MedADE' else np.std(vals)
         data['Aggregate (All Scenes)'].append(f"{agg:.2f}")
