@@ -20,6 +20,11 @@ class PathConfig:
     def get_scene_dir(data_dir, scene_name):
         """Path to a specific scene directory"""
         return os.path.join(PathConfig.get_scenes_dir(data_dir), scene_name)
+
+    @staticmethod
+    def get_scene_list(data_dir):
+        """List of scene names in the dataset"""
+        return sorted(glob(os.path.join(PathConfig.get_scenes_dir(data_dir), '*')))
     
     # Ground truth paths
     @staticmethod

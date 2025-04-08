@@ -165,7 +165,7 @@ def main():
     os.chdir(args.output_dir)
 
     scenes_dir = PathConfig.get_scenes_dir(args.data_dir)
-    scene_dirs = sorted(glob(os.path.join(scenes_dir, 'scene_*')))
+    scene_dirs = sorted(glob(os.path.join(scenes_dir, '*')))
 
     print(f"[INFO] Found {len(scene_dirs)} scenes")
     scene_metrics = {d: load_metrics(d) for d in tqdm(scene_dirs)}
