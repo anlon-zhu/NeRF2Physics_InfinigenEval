@@ -87,7 +87,7 @@ def create_grid_image(scene_dirs, view_idx, mode, cmap, filename, label, grid_si
                 labels.append(os.path.basename(d))
             elif mode == 'diff' and gt is not None and pred.shape == gt.shape:
                 diff = np.abs(pred - gt)
-                diff[gt == -1] = 0
+                diff[pred == 0] = np.nan
                 images.append(diff)
                 labels.append(os.path.basename(d))
             elif mode == 'mask':
@@ -104,16 +104,19 @@ def create_grid_image(scene_dirs, view_idx, mode, cmap, filename, label, grid_si
 
     for ax, img, title in zip(axes.flatten(), images, labels):
         if mode == 'mask':
-            im = ax.imshow(img, cmap='gray', vmin=0, vmax=1)
+            im = ax.imshow(img, cmap='gray', vmin=0, vmax=1, interpolation='none')
         elif mode == 'pred':
             # Custom colormap: white for 0
             base_cmap = plt.get_cmap('jet')
             cmap_data = base_cmap(np.linspace(0, 1, 256))
             cmap_data[0] = [1, 1, 1, 1]  # white for 0
             custom_cmap = ListedColormap(cmap_data)
-            im = ax.imshow(img, cmap=custom_cmap, vmin=vmin, vmax=vmax)
-        else:
-            im = ax.imshow(img, cmap=cmap, vmin=vmin, vmax=vmax)
+            im = ax.imshow(img, cmap=custom_cmap, vmin=vmin, vmax=vmax, interpolation='none')
+        elif mode == 'diff':
+            im = ax.imshow(gt, cmap='gray', alpha=0.3)
+            # add a dark overlay
+            im = ax.imshow(np.zeros_like(gt), cmap='gray', alpha=0.2, interpolation='none')
+            im = ax.imshow(img, cmap=cmap, vmin=vmin, vmax=vmax, interpolation='none')
         ax.set_title(title, fontsize=6)
         ax.axis('off')
 
@@ -156,7 +159,7 @@ def main():
 
     # Visualizations
     create_metrics_violinplot(scene_metrics)
-    create_grid_image(scene_dirs, args.view_idx, mode='diff', cmap='inferno',
+    create_grid_image(scene_dirs, args.view_idx, mode='diff', cmap='jet',
                       filename='grid_diff_density.png', label='|Prediction - GT|', grid_size=VisualizationConfig.GRID_SIZE)
     create_grid_image(scene_dirs, args.view_idx, mode='pred', cmap='jet',
                       filename='grid_pred_density.png', label='Predicted Density (kg/m³)', grid_size=VisualizationConfig.GRID_SIZE)
