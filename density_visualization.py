@@ -104,7 +104,7 @@ def create_grid_image(scene_dirs, view_idx, mode, cmap, filename, label, grid_si
     # Set up figure and axes
     fig, axes = plt.subplots(rows, cols, figsize=(cols * 2, rows * 2))
 
-    for ax, img, title in zip(axes.flatten(), images, labels):
+    for i, (ax, img, title) in enumerate(zip(axes.flatten(), images, labels)):
         if mode == 'mask':
             im = ax.imshow(img, cmap='gray', vmin=0, vmax=1, interpolation='none')
         elif mode == 'pred':
@@ -115,12 +115,12 @@ def create_grid_image(scene_dirs, view_idx, mode, cmap, filename, label, grid_si
             custom_cmap = ListedColormap(cmap_data)
             im = ax.imshow(img, cmap=custom_cmap, vmin=vmin, vmax=vmax, interpolation='none')
         elif mode == 'diff':
-            gt = gt_refs[images.index(img)]
+            gt = gt_refs[i]
             im = ax.imshow(gt, cmap='gray', alpha=1.0)
             # add a dark overlay
             im = ax.imshow(np.zeros_like(gt), cmap='gray', alpha=0.8, interpolation='none')
             im = ax.imshow(img, cmap=cmap, vmin=vmin, vmax=vmax, interpolation='none')
-        ax.set_title(title, fontsize=6)
+        ax.set_title(title, fontsize=8)
         ax.axis('off')
 
     # Turn off remaining unused axes
