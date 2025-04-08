@@ -66,7 +66,7 @@ def create_metrics_violinplot(scene_metrics):
                                 ['metrics_dist_violin1.png', 'metrics_dist_violin2.png']):
         plt.figure(figsize=(10, 6))
         sns.violinplot(x='Metric', y='Value', data=df[df['Metric'].isin(group)],
-                       inner='box', palette='jet')
+                       inner='box', palette='Set2')
         plt.title('Distribution of Evaluation Metrics')
         plt.tight_layout()
         plt.savefig(filename, dpi=300)
