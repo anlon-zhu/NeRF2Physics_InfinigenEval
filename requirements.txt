@@ -5,3 +5,4 @@ transformers
 open_clip_torch
 # open3d installed via install_open3d.sh script with headless rendering support
 openai==0.28
+seaborn
