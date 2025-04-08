@@ -13,9 +13,9 @@
 #SBATCH --mail-user=az4244@princeton.edu
 
 # Check arguments
-if [ "$#" -lt 2 ]; then
+if [ "$#" -lt 1 ]; then
     echo "Usage: $0 <data_dir>"
-    echo "Example: $0 /n/fs/scratch/${USER}/nerf2physics/infinigen_nerf_data 18015bf3"
+    echo "Example: $0 /n/fs/scratch/${USER}/nerf2physics/infinigen_nerf_data"
     exit 1
 fi
 
