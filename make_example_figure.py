@@ -60,7 +60,7 @@ def create_scene_grid_infinigen(
     # You can tweak these to get the exact look you want
     plt.subplots_adjust(
         left=0.01, right=0.99,
-        top=0.02, bottom=0.01,
+        top=0.99, bottom=0.01,
         wspace=0.01, hspace=0.01
     )
 
