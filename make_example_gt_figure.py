@@ -45,7 +45,7 @@ def create_scene_grid_from_paths(
     fig, axes = plt.subplots(rows * 2, cols, figsize=(20, 8))
     plt.subplots_adjust(
         left=0.01, right=0.99,
-        top=0.01, bottom=0.01,
+        top=0.02, bottom=0.01,
         wspace=0.01, hspace=0.01
     )
 
